@@ -1,46 +1,99 @@
-# Reposicao de Estoque
+# Reposição de estoque para GitHub Pages
 
-Programa em HTML, CSS e JavaScript para calcular reposicao de estoque por modelo, cor e tamanho.
+Esta é a versão estática do sistema. Ela não usa backend, banco de dados, Python ou FastAPI, porque o GitHub Pages só hospeda arquivos estáticos.
 
-Visual inspirado em jogo arcade classico, com fundo escuro, labirinto azul, pontos amarelos e botoes em destaque.
+O processamento dos arquivos acontece no navegador do usuário. Os arquivos enviados não são transferidos para servidor.
 
-## Como rodar no GitHub Pages
+## Como publicar
 
-1. Crie um repositorio no GitHub.
-2. Envie estes arquivos para a raiz do repositorio:
+Opção simples:
+
+1. Crie um repositório no GitHub.
+2. Envie estes arquivos para a raiz do repositório:
    - `index.html`
    - `styles.css`
    - `app.js`
-   - `README.md`
-   - `CODIGO.md`
-3. No GitHub, entre em `Settings > Pages`.
-4. Em `Build and deployment`, escolha:
-   - Source: `Deploy from a branch`
-   - Branch: `main`
-   - Folder: `/root`
-5. Salve e aguarde o GitHub gerar o link.
-
-O GitHub Pages vai abrir automaticamente o arquivo `index.html`.
+   - `.nojekyll`
+3. No GitHub, abra `Settings > Pages`.
+4. Em `Build and deployment`, selecione `Deploy from a branch`.
+5. Escolha a branch `main` e a pasta `/root`.
+6. Salve e aguarde o link do GitHub Pages.
 
 ## Arquivos aceitos
 
-- `.csv`
-- `.tsv`
-- `.txt`
-- `.xlsx`
-- `.xlsm`
+O sistema aceita `PDF`, `XLSX`, `XLSM` e `CSV`.
 
-Para ler Excel no navegador, o app usa a biblioteca SheetJS via CDN. Se o Excel nao carregar, envie os dados em CSV.
+Para PDFs, o arquivo precisa ter texto/tabelas extraíveis. PDF escaneado como imagem deve ser convertido para CSV ou XLSX antes do upload.
 
-## Regras ja configuradas
+## Entradas
 
-- Grades ideais de T-shirt Tradicional, T-shirt Max, Camiseta Over e Cropped Max.
-- Malha Max e Malha Select consolidadas como `Malha Max/Select`.
-- Azul Marinho normalizado como Azul Dark Blue.
-- Cores com tecido, mas ausentes no site do modelo, ficam fora da reposicao.
-- Estoque negativo entra no calculo.
-- XG e G1 podem ser agrupados como XG/G1 quando configurado.
+### 1. Estoque de malha
 
-## Privacidade
+| Cor | Quantidade |
+| --- | --- |
+| Azul Marinho | 20 |
+| Off White | 12 |
 
-Os arquivos enviados nao vao para servidor. O calculo acontece no navegador.
+Se a coluna `Quantidade` não existir, toda cor listada será considerada disponível.
+
+### 2. Estoque atual do site
+
+Formato longo:
+
+| Cor | Tamanho | Estoque |
+| --- | --- | --- |
+| Azul Marinho | P | 2 |
+| Azul Marinho | XG | 1 |
+
+Formato em grade:
+
+| Cor | P | M | G | XG |
+| --- | --- | --- | --- | --- |
+| Azul Marinho | 2 | 4 | 1 | 1 |
+
+`XG` é tratado como `G1`.
+
+### 3. Meta por tamanho
+
+Formato longo:
+
+| Tamanho | Meta |
+| --- | --- |
+| P | 4 |
+| M | 4 |
+| G1 | 3 |
+
+Formato em grade:
+
+| P | M | G | G1 |
+| --- | --- | --- | --- |
+| 4 | 4 | 4 | 3 |
+
+### 4. Cores bloqueadas
+
+| Cor |
+| --- |
+| Verde Militar |
+| Rosa Seco |
+
+## Regra
+
+Para cada cor que existe no site, possui malha disponível e não está bloqueada:
+
+```text
+reposicao = max(meta_por_tamanho - estoque_atual_no_site, 0)
+```
+
+Cores que não existem no site, cores sem malha disponível e cores bloqueadas ficam fora da reposição.
+
+## Saída
+
+O arquivo baixado é uma planilha `.xlsx` com as abas:
+
+| Aba | Conteúdo |
+| --- | --- |
+| `Resumo` | Totais principais. |
+| `Reposicao` | Somente linhas com reposição maior que zero. |
+| `Grade por cor` | Reposição consolidada por cor e tamanho. |
+| `Auditoria` | Todas as combinações calculadas. |
+| `Excluidas` | Cores filtradas e motivo da exclusão. |
