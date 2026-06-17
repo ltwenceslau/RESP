@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reposição de Estoque</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Planejamento operacional</p>
+          <h1>Reposição de Estoque</h1>
+        </div>
+        <div class="top-actions">
+          <button class="button subtle" id="demoButton" type="button">Carregar exemplo</button>
+          <button class="button" id="saveButton" type="button">Salvar regras</button>
+          <button class="button primary" id="calculateButton" type="button">Calcular</button>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Seções">
+        <button class="tab active" data-tab="dados" type="button">Dados</button>
+        <button class="tab" data-tab="regras" type="button">Regras</button>
+        <button class="tab" data-tab="resultado" type="button">Resultado</button>
+      </nav>
+
+      <section class="notice hidden" id="messageBox" role="status"></section>
+
+      <section class="tab-panel active" id="tab-dados">
+        <div class="upload-grid">
+          <article class="panel upload-panel" data-kind="stock">
+            <div class="panel-header">
+              <div>
+                <h2>Estoque atual</h2>
+                <p id="stockMeta">Nenhum arquivo carregado</p>
+              </div>
+              <span class="pill">CSV/XLSX</span>
+            </div>
+            <label class="drop-zone">
+              <input id="stockFile" type="file" accept=".csv,.tsv,.txt,.xlsx,.xlsm" />
+              <span>Selecionar arquivo</span>
+            </label>
+            <div class="mapping-grid" id="stockMapping"></div>
+          </article>
+
+          <article class="panel upload-panel" data-kind="site">
+            <div class="panel-header">
+              <div>
+                <h2>Cadastro do site</h2>
+                <p id="siteMeta">Nenhum arquivo carregado</p>
+              </div>
+              <span class="pill">CSV/XLSX</span>
+            </div>
+            <label class="drop-zone">
+              <input id="siteFile" type="file" accept=".csv,.tsv,.txt,.xlsx,.xlsm" />
+              <span>Selecionar arquivo</span>
+            </label>
+            <div class="mapping-grid" id="siteMapping"></div>
+          </article>
+
+          <article class="panel upload-panel" data-kind="fabric">
+            <div class="panel-header">
+              <div>
+                <h2>Estoque de tecido</h2>
+                <p id="fabricMeta">Nenhum arquivo carregado</p>
+              </div>
+              <span class="pill">CSV/XLSX</span>
+            </div>
+            <label class="drop-zone">
+              <input id="fabricFile" type="file" accept=".csv,.tsv,.txt,.xlsx,.xlsm" />
+              <span>Selecionar arquivo</span>
+            </label>
+            <div class="mapping-grid" id="fabricMapping"></div>
+          </article>
+        </div>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Prévia dos dados</h2>
+              <p id="previewMeta">Carregue um arquivo para visualizar as primeiras linhas</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="previewTable"></table>
+          </div>
+        </article>
+      </section>
+
+      <section class="tab-panel" id="tab-regras">
+        <div class="rules-layout">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Grades ideais</h2>
+                <p>Metas por modelo e tamanho</p>
+              </div>
+              <button class="button subtle" id="addModelButton" type="button">Adicionar modelo</button>
+            </div>
+            <div id="gradesEditor" class="grades-editor"></div>
+          </article>
+
+          <aside class="side-stack">
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2>Opções</h2>
+                  <p>Regras do cálculo</p>
+                </div>
+              </div>
+              <label class="switch-row">
+                <input id="excludeSiteToggle" type="checkbox" />
+                <span>Excluir cores fora do site</span>
+              </label>
+              <label class="switch-row">
+                <input id="negativeStockToggle" type="checkbox" />
+                <span>Considerar estoque negativo</span>
+              </label>
+              <label class="switch-row">
+                <input id="inactiveRowsToggle" type="checkbox" />
+                <span>Ignorar linhas inativas do site</span>
+              </label>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2>Aliases de cor</h2>
+                  <p>Normalização de nomes</p>
+                </div>
+                <button class="button subtle" id="addColorAliasButton" type="button">Adicionar</button>
+              </div>
+              <div id="colorAliasesEditor" class="stack"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2>Bases de tecido</h2>
+                  <p>Equivalências e vínculo por modelo</p>
+                </div>
+              </div>
+              <div class="subsection">
+                <div class="mini-header">
+                  <strong>Equivalências</strong>
+                  <button class="button subtle small" id="addBaseAliasButton" type="button">Adicionar</button>
+                </div>
+                <div id="baseAliasesEditor" class="stack"></div>
+              </div>
+              <div class="subsection">
+                <div class="mini-header">
+                  <strong>Base por modelo</strong>
+                </div>
+                <div id="modelBasesEditor" class="stack"></div>
+              </div>
+            </article>
+          </aside>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="tab-resultado">
+        <div class="result-toolbar panel">
+          <div class="field">
+            <label for="modelFilter">Modelo</label>
+            <select id="modelFilter"></select>
+          </div>
+          <div class="field">
+            <label for="statusFilter">Status</label>
+            <select id="statusFilter">
+              <option value="">Todos</option>
+              <option value="Repor">Repor</option>
+              <option value="Sem tecido">Sem tecido</option>
+              <option value="OK">OK</option>
+            </select>
+          </div>
+          <div class="field search-field">
+            <label for="searchInput">Busca</label>
+            <input id="searchInput" type="search" placeholder="cor, tamanho ou modelo" />
+          </div>
+          <button class="button subtle" id="downloadCsv" type="button">Baixar CSV</button>
+        </div>
+
+        <div class="metric-grid" id="metricGrid"></div>
+
+        <article class="panel warnings-panel hidden" id="warningsPanel">
+          <div class="panel-header">
+            <div>
+              <h2>Avisos</h2>
+              <p>Conferências do cálculo</p>
+            </div>
+          </div>
+          <ul id="warningsList"></ul>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Resultado por SKU</h2>
+              <p id="resultMeta">Calcule para ver a reposição</p>
+            </div>
+          </div>
+          <div class="table-wrap result-table-wrap">
+            <table id="resultTable"></table>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
