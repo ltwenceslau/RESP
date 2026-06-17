@@ -54,6 +54,7 @@ Controla o visual do sistema:
 - abas
 - paineis
 - responsividade para tela menor
+- tema arcade com fundo escuro, labirinto azul e pontos amarelos
 
 ### `app.js`
 

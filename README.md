@@ -2,6 +2,8 @@
 
 Programa em HTML, CSS e JavaScript para calcular reposicao de estoque por modelo, cor e tamanho.
 
+Visual inspirado em jogo arcade classico, com fundo escuro, labirinto azul, pontos amarelos e botoes em destaque.
+
 ## Como rodar no GitHub Pages
 
 1. Crie um repositorio no GitHub.

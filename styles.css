@@ -553,3 +553,323 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* Tema visual inspirado em arcade classico: labirinto azul, pontos amarelos e paineis escuros. */
+:root {
+  color-scheme: dark;
+  --bg: #05050f;
+  --panel: #090a22;
+  --panel-strong: #11143b;
+  --text: #fff9d9;
+  --muted: #9ea9ff;
+  --border: #1d49ff;
+  --accent: #ffe600;
+  --accent-strong: #ffb400;
+  --green: #20f2a0;
+  --red: #ff4f8b;
+  --amber: #ffe600;
+  --cyan: #00e5ff;
+  --shadow: 0 0 0 2px rgba(29, 73, 255, 0.75), 0 0 22px rgba(29, 73, 255, 0.34);
+}
+
+body {
+  background:
+    radial-gradient(circle at 12px 12px, rgba(255, 230, 0, 0.42) 0 2px, transparent 3px) 0 0 / 48px 48px,
+    linear-gradient(90deg, transparent 0 46px, rgba(29, 73, 255, 0.38) 46px 48px) 0 0 / 96px 96px,
+    linear-gradient(0deg, transparent 0 46px, rgba(29, 73, 255, 0.38) 46px 48px) 0 0 / 96px 96px,
+    #05050f;
+  color: var(--text);
+  font-family: "Courier New", Consolas, monospace;
+}
+
+.app-shell {
+  position: relative;
+  padding-top: 24px;
+}
+
+.app-shell::before,
+.app-shell::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.app-shell::before {
+  width: 86px;
+  height: 86px;
+  right: 34px;
+  bottom: 34px;
+  border-radius: 50%;
+  background: conic-gradient(from 36deg, transparent 0 72deg, #ffe600 73deg 360deg);
+  filter: drop-shadow(0 0 16px rgba(255, 230, 0, 0.45));
+}
+
+.app-shell::after {
+  width: 18px;
+  height: 18px;
+  right: 140px;
+  bottom: 68px;
+  border-radius: 50%;
+  background: #ffe600;
+  box-shadow:
+    -38px 0 0 #ffe600,
+    -76px 0 0 #ffe600,
+    -114px 0 0 #ffe600,
+    -152px 0 0 #ffe600;
+}
+
+.topbar {
+  position: relative;
+  overflow: hidden;
+  border: 3px solid var(--border);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(255, 230, 0, 0.13), transparent 22%),
+    #070821;
+  box-shadow: var(--shadow);
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+.topbar::before {
+  content: "";
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: conic-gradient(from 36deg, transparent 0 72deg, var(--accent) 73deg 360deg);
+  filter: drop-shadow(0 0 12px rgba(255, 230, 0, 0.65));
+  order: -1;
+}
+
+.topbar::after {
+  content: "";
+  position: absolute;
+  left: 80px;
+  right: 18px;
+  bottom: 9px;
+  height: 4px;
+  background:
+    repeating-linear-gradient(90deg, var(--accent) 0 8px, transparent 8px 24px);
+  opacity: 0.85;
+}
+
+.eyebrow {
+  color: var(--cyan);
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.75);
+}
+
+h1 {
+  color: var(--accent);
+  font-size: 30px;
+  text-shadow:
+    2px 2px 0 #ff4f8b,
+    0 0 16px rgba(255, 230, 0, 0.36);
+}
+
+h2 {
+  color: #ffffff;
+}
+
+.panel-header p,
+.upload-panel p,
+.field label,
+.mapping-field label {
+  color: var(--muted);
+}
+
+.button {
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  background: #090a22;
+  color: var(--accent);
+  box-shadow: 0 0 0 2px #05050f, 0 0 12px rgba(255, 230, 0, 0.24);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.button:hover {
+  background: #151847;
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+.button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #080914;
+  box-shadow: 0 0 0 2px #05050f, 0 0 18px rgba(255, 230, 0, 0.62);
+}
+
+.button.primary:hover {
+  background: #ffffff;
+  color: #080914;
+}
+
+.button.subtle {
+  background: var(--panel-strong);
+}
+
+.button.danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.tabs {
+  border: 3px solid var(--border);
+  border-radius: 8px;
+  background: #070821;
+  box-shadow: var(--shadow);
+  padding: 0 8px;
+}
+
+.tab {
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.tab.active {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+  text-shadow: 0 0 10px rgba(255, 230, 0, 0.56);
+}
+
+.panel,
+.metric {
+  background: rgba(9, 10, 34, 0.96);
+  border: 3px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.panel-header {
+  border-bottom: 2px solid var(--border);
+  background:
+    radial-gradient(circle at 12px 50%, var(--accent) 0 3px, transparent 4px) 0 0 / 36px 100%,
+    #0c0f2f;
+}
+
+.pill {
+  border: 1px solid var(--cyan);
+  background: #031824;
+  color: var(--cyan);
+}
+
+.drop-zone {
+  border: 2px dashed var(--accent);
+  border-radius: 4px;
+  background:
+    linear-gradient(90deg, rgba(255, 230, 0, 0.1), transparent),
+    #08091e;
+  color: var(--accent);
+}
+
+.drop-zone:hover {
+  background: #141746;
+  color: #ffffff;
+}
+
+input,
+select {
+  border: 2px solid #2849df;
+  border-radius: 4px;
+  background: #020412;
+  color: var(--text);
+}
+
+input:focus,
+select:focus,
+button:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+option {
+  background: #020412;
+  color: var(--text);
+}
+
+th,
+td {
+  border-bottom: 1px solid rgba(29, 73, 255, 0.72);
+}
+
+th {
+  background: #11143b;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+tbody tr:hover {
+  background: rgba(255, 230, 0, 0.1);
+}
+
+.grade-block {
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  background: #070821;
+}
+
+.grade-title {
+  background: #11143b;
+}
+
+.switch-row,
+.subsection + .subsection {
+  border-color: rgba(29, 73, 255, 0.72);
+}
+
+.metric {
+  background:
+    radial-gradient(circle at 14px 14px, var(--accent) 0 3px, transparent 4px),
+    #090a22;
+}
+
+.metric span {
+  color: var(--cyan);
+}
+
+.metric strong {
+  color: var(--accent);
+  text-shadow: 0 0 12px rgba(255, 230, 0, 0.45);
+}
+
+.status {
+  border-radius: 4px;
+  border: 1px solid currentColor;
+}
+
+.status.repor {
+  background: rgba(255, 230, 0, 0.12);
+  color: var(--accent);
+}
+
+.status.ok {
+  background: rgba(32, 242, 160, 0.12);
+  color: var(--green);
+}
+
+.status.sem-tecido {
+  background: rgba(255, 79, 139, 0.13);
+  color: var(--red);
+}
+
+.notice {
+  border: 2px solid var(--accent);
+  background: #211d00;
+  color: var(--accent);
+}
+
+.notice.success {
+  border-color: var(--green);
+  background: #022018;
+  color: var(--green);
+}
+
+.notice.error {
+  border-color: var(--red);
+  background: #270211;
+  color: var(--red);
+}
