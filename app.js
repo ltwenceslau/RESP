@@ -40,6 +40,7 @@ const TESSERACT_OPTIONS = {
   corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js",
   langPath: "https://tessdata.projectnaptha.com/4.0.0",
 };
+const THEME_STORAGE_KEY = "reposicaoEstoqueTheme";
 
 const elements = {
   form: document.getElementById("wizardForm"),
@@ -65,6 +66,8 @@ const elements = {
   summarySite: document.getElementById("summarySite"),
   summaryMeta: document.getElementById("summaryMeta"),
   summaryBlocked: document.getElementById("summaryBlocked"),
+  themeToggle: document.getElementById("themeToggle"),
+  themeLabel: document.getElementById("themeLabel"),
 };
 
 let currentStep = 1;
@@ -82,8 +85,44 @@ renderSizeInputs(elements.kidsSizes, KIDS_SIZES);
 setupFileInput(elements.fabricFile, elements.fabricFileName);
 setupFileInput(elements.siteFile, elements.siteFileName);
 setupFileInput(elements.blockedFile, elements.blockedFileName);
+setupTheme();
 setupWizard();
 updateWizard();
+
+function setupTheme() {
+  applyTheme(getStoredTheme() === "dark" ? "dark" : "light", false);
+  elements.themeToggle?.addEventListener("click", () => {
+    const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    applyTheme(nextTheme, true);
+  });
+}
+
+function applyTheme(theme, persist) {
+  const isDark = theme === "dark";
+  document.documentElement.dataset.theme = isDark ? "dark" : "light";
+  if (elements.themeToggle) {
+    elements.themeToggle.setAttribute("aria-pressed", String(isDark));
+    elements.themeToggle.setAttribute("aria-label", isDark ? "Usar tema claro" : "Usar tema escuro");
+  }
+  if (elements.themeLabel) {
+    elements.themeLabel.textContent = isDark ? "Escuro" : "Claro";
+  }
+  if (persist) {
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, isDark ? "dark" : "light");
+    } catch {
+      // O tema ainda funciona mesmo se o navegador bloquear armazenamento local.
+    }
+  }
+}
+
+function getStoredTheme() {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY) || "light";
+  } catch {
+    return "light";
+  }
+}
 
 function setupWizard() {
   document.querySelectorAll("[data-step-target]").forEach((button) => {
