@@ -80,10 +80,10 @@
           </div>
           <label>
             <span>Nome Estoque</span>
-            <select id="modelSelect">
-              <option value="">Selecione um modelo</option>
-            </select>
+            <input id="modelSearch" type="search" autocomplete="off" placeholder="Digite para pesquisar o modelo">
+            <input id="modelValue" type="hidden">
           </label>
+          <div id="modelResults" class="model-results" aria-label="Modelos encontrados"></div>
         </div>
       </section>
 

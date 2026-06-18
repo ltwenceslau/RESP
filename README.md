@@ -57,7 +57,7 @@ Se a coluna `Quantidade` não existir, toda cor listada será considerada dispon
 
 ## Entrada: estoque do site
 
-O sistema procura os modelos na coluna `Nome Estoque`. Depois do upload, ele mostra uma lista para escolher qual modelo será reposto.
+O sistema procura os modelos na coluna `Nome Estoque`. Depois do upload, ele abre uma busca: digite parte do nome do modelo e clique no resultado desejado. Também é possível apertar `Enter` para escolher o primeiro resultado filtrado.
 
 Colunas usadas:
 
@@ -93,7 +93,7 @@ Para cada cor que existe no site, possui tecido disponível e não está bloquea
 reposicao = max(meta_por_tamanho - qtd_virtual_do_site, 0)
 ```
 
-Cores que existem no tecido, mas não aparecem no site, entram na reposição com estoque zero. Cores sem tecido disponível e cores bloqueadas ficam fora da aba `Reposição Final` e aparecem nas abas de controle.
+A reposição considera somente cores que já existem no estoque do site para o modelo escolhido. Depois disso, o sistema mantém na aba `Reposição Final` apenas as cores que também possuem tecido disponível e não estão bloqueadas. Cores que existem no tecido, mas não existem no site para aquele modelo, não entram na reposição.
 
 ## Saída
 

@@ -52,7 +52,9 @@ const elements = {
   blockedFileName: document.getElementById("blockedFileName"),
   modelPicker: document.getElementById("modelPicker"),
   modelNotice: document.getElementById("modelNotice"),
-  modelSelect: document.getElementById("modelSelect"),
+  modelSearch: document.getElementById("modelSearch"),
+  modelValue: document.getElementById("modelValue"),
+  modelResults: document.getElementById("modelResults"),
   adultSizes: document.getElementById("adultSizes"),
   kidsSizes: document.getElementById("kidsSizes"),
   backButton: document.getElementById("backButton"),
@@ -68,6 +70,7 @@ const elements = {
 let currentStep = 1;
 let siteRowsCache = null;
 let siteFileSignature = "";
+let siteModels = [];
 
 if (window.pdfjsLib) {
   window.pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -102,11 +105,24 @@ function setupWizard() {
   });
 
   elements.blockedText.addEventListener("input", updateSummary);
-  elements.modelSelect.addEventListener("change", () => {
+  elements.modelSearch.addEventListener("input", () => {
+    const exactMatch = siteModels.find((model) => normalizeLabel(model.name) === normalizeLabel(elements.modelSearch.value));
+    elements.modelValue.value = exactMatch?.name || "";
+    renderModelResults(elements.modelSearch.value);
     updateSummary();
     updateStepper();
     setStatus("", "");
   });
+  elements.modelSearch.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      const firstMatch = findModelMatches(elements.modelSearch.value, 1)[0];
+      if (firstMatch) {
+        event.preventDefault();
+        selectModel(firstMatch.name);
+      }
+    }
+  });
+  elements.modelSearch.addEventListener("focus", () => renderModelResults(elements.modelSearch.value));
 
   elements.form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -199,7 +215,7 @@ function validateStep(step, showMessage = true) {
     if (showMessage) setStatus("error", "Envie o arquivo do estoque do site para continuar.");
     return false;
   }
-  if (step === 2 && !elements.modelSelect.value) {
+  if (step === 2 && !elements.modelValue.value) {
     if (showMessage) setStatus("error", "Selecione o modelo em Nome Estoque para continuar.");
     return false;
   }
@@ -221,7 +237,7 @@ function readMetaEntries() {
 
 function updateSummary() {
   elements.summaryFabric.textContent = elements.fabricFile.files[0]?.name || "Aguardando arquivo";
-  const selectedModel = elements.modelSelect.value;
+  const selectedModel = elements.modelValue.value;
   if (elements.siteFile.files[0] && selectedModel) {
     elements.summarySite.textContent = `${elements.siteFile.files[0].name} | ${selectedModel}`;
   } else {
@@ -265,10 +281,10 @@ async function generateWorkbook() {
 
     const sheets = calculateReplacement(
       normalizeFabricStock(fabricRows),
-      normalizeSiteStock(siteRows, elements.modelSelect.value),
+      normalizeSiteStock(siteRows, elements.modelValue.value),
       normalizeTargetBySize(metaRows),
       normalizeBlockedColors(blockedRows),
-      elements.modelSelect.value,
+      elements.modelValue.value,
     );
 
     exportWorkbook(sheets);
@@ -320,24 +336,23 @@ async function getSiteRows(forceReload = false) {
 
 function resetModelSelect(message) {
   elements.modelPicker.hidden = false;
-  elements.modelSelect.innerHTML = '<option value="">Selecione um modelo</option>';
-  elements.modelSelect.value = "";
+  siteModels = [];
+  elements.modelSearch.value = "";
+  elements.modelValue.value = "";
+  elements.modelResults.innerHTML = "";
   elements.modelNotice.textContent = message;
 }
 
 function populateModelSelect(models) {
   elements.modelPicker.hidden = false;
-  elements.modelSelect.innerHTML = '<option value="">Selecione um modelo</option>';
-
-  models.forEach((model) => {
-    const option = document.createElement("option");
-    option.value = model.name;
-    option.textContent = `${model.name} (${model.count} linhas)`;
-    elements.modelSelect.appendChild(option);
-  });
+  siteModels = models;
+  elements.modelSearch.value = "";
+  elements.modelValue.value = "";
 
   if (models.length === 1) {
-    elements.modelSelect.value = models[0].name;
+    selectModel(models[0].name);
+  } else {
+    renderModelResults("");
   }
 
   elements.modelNotice.textContent =
@@ -346,6 +361,59 @@ function populateModelSelect(models) {
       : `${models.length} modelos encontrados. Escolha qual será reposto.`;
   updateSummary();
   updateStepper();
+}
+
+function renderModelResults(query) {
+  const matches = findModelMatches(query, 60);
+
+  elements.modelResults.innerHTML = "";
+  if (!siteModels.length) {
+    return;
+  }
+
+  if (!matches.length) {
+    const empty = document.createElement("div");
+    empty.className = "model-option";
+    empty.textContent = "Nenhum modelo encontrado com esse texto";
+    elements.modelResults.appendChild(empty);
+    elements.modelNotice.textContent = "Digite outro trecho do Nome Estoque.";
+    return;
+  }
+
+  matches.forEach((model) => {
+    const option = document.createElement("button");
+    option.className = "model-option";
+    option.type = "button";
+    option.classList.toggle("is-selected", elements.modelValue.value === model.name);
+    option.innerHTML = `<span>${escapeHtml(model.name)}</span><small>${model.count} linhas</small>`;
+    option.addEventListener("click", () => selectModel(model.name));
+    elements.modelResults.appendChild(option);
+  });
+
+  elements.modelNotice.textContent =
+    matches.length === siteModels.length
+      ? `${siteModels.length} modelos encontrados. Digite para filtrar ou clique no modelo.`
+      : `${matches.length} de ${siteModels.length} modelos encontrados para a busca.`;
+}
+
+function findModelMatches(query, limit = 60) {
+  const normalizedQuery = normalizeLabel(query);
+  return siteModels
+    .filter((model) => !normalizedQuery || normalizeLabel(model.name).includes(normalizedQuery))
+    .slice(0, limit);
+}
+
+function selectModel(modelName) {
+  const model = siteModels.find((item) => item.name === modelName);
+  elements.modelValue.value = modelName;
+  elements.modelSearch.value = modelName;
+  elements.modelResults.innerHTML = "";
+  elements.modelNotice.textContent = model
+    ? `Modelo selecionado: ${model.name} (${model.count} linhas).`
+    : `Modelo selecionado: ${modelName}.`;
+  updateSummary();
+  updateStepper();
+  setStatus("", "");
 }
 
 function extractSiteModels(rows) {
@@ -760,9 +828,10 @@ function calculateReplacement(fabric, siteStock, target, blocked, modelName = ""
   const blockedRows = [];
   const noFabricRows = [];
   const finalKeys = new Set(
-    fabric
-      .filter((row) => row.available && !blockedByKey.has(row.compareKey))
-      .map((row) => row.compareKey),
+    Array.from(siteByKey.keys()).filter((key) => {
+      const fabricRow = fabricByKey.get(key);
+      return fabricRow?.available && !blockedByKey.has(key);
+    }),
   );
 
   finalKeys.forEach((key) => {
@@ -793,7 +862,8 @@ function calculateReplacement(fabric, siteStock, target, blocked, modelName = ""
       return;
     }
 
-    if (!fabricByKey.has(key) && row["Total Repor"] > 0) {
+    const fabricRow = fabricByKey.get(key);
+    if (!fabricRow?.available && row["Total Repor"] > 0) {
       noFabricRows.push({
         Modelo: model,
         "Cor no site": siteColor.color,
@@ -1028,7 +1098,7 @@ function buildSummarySheet({ model, finalRows, blockedRows, noFabricRows }) {
     { "Resumo da Avaliação": "Tamanho equivalente", Valor: "XG foi tratado como G1 quando apareceu." },
     {
       "Resumo da Avaliação": "Filtro de tecido",
-      Valor: "Só entram na reposição cores presentes no estoque de tecido e não bloqueadas.",
+      Valor: "Só entram na reposição cores que existem no site, possuem tecido disponível e não estão bloqueadas.",
     },
   ];
 }
@@ -1073,7 +1143,7 @@ function buildCriteriaSheet({ model, target, sizes }) {
     { Critério: "Cálculo por tamanho", Valor: "MAX(meta - estoque, 0)." },
     {
       Critério: "Cores ausentes do site",
-      Valor: "Se a cor está em tecido, não está bloqueada e não existe no site, entra como estoque 0.",
+      Valor: "Cor que existe no tecido, mas não existe no site para o modelo escolhido, não entra na reposição.",
     },
   ];
 }
@@ -1369,6 +1439,15 @@ function findLastIndex(items, predicate) {
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function escapeHtml(value) {
+  return cleanText(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function setStatus(type, message) {
