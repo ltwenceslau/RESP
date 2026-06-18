@@ -55,10 +55,6 @@ const elements = {
   modelSelect: document.getElementById("modelSelect"),
   adultSizes: document.getElementById("adultSizes"),
   kidsSizes: document.getElementById("kidsSizes"),
-  bulkMetaValue: document.getElementById("bulkMetaValue"),
-  applyAdultMeta: document.getElementById("applyAdultMeta"),
-  applyKidsMeta: document.getElementById("applyKidsMeta"),
-  clearMeta: document.getElementById("clearMeta"),
   backButton: document.getElementById("backButton"),
   nextButton: document.getElementById("nextButton"),
   processButton: document.getElementById("processButton"),
@@ -105,9 +101,6 @@ function setupWizard() {
     }
   });
 
-  elements.applyAdultMeta.addEventListener("click", () => applyBulkMeta(ADULT_SIZES));
-  elements.applyKidsMeta.addEventListener("click", () => applyBulkMeta(KIDS_SIZES));
-  elements.clearMeta.addEventListener("click", clearMeta);
   elements.blockedText.addEventListener("input", updateSummary);
   elements.modelSelect.addEventListener("change", () => {
     updateSummary();
@@ -217,34 +210,6 @@ function validateStep(step, showMessage = true) {
   return true;
 }
 
-function applyBulkMeta(sizes) {
-  const value = toNumber(elements.bulkMetaValue.value);
-  if (value <= 0) {
-    elements.bulkMetaValue.focus();
-    setStatus("error", "Digite um valor maior que zero para aplicar.");
-    return;
-  }
-
-  sizes.forEach((size) => {
-    const input = document.querySelector(`[data-size="${size}"]`);
-    if (input) {
-      input.value = value;
-      input.closest(".size-bubble").classList.add("is-filled");
-    }
-  });
-  updateSummary();
-  setStatus("", "");
-}
-
-function clearMeta() {
-  document.querySelectorAll("[data-size]").forEach((input) => {
-    input.value = "";
-    input.closest(".size-bubble").classList.remove("is-filled");
-  });
-  updateSummary();
-  setStatus("", "");
-}
-
 function readMetaEntries() {
   return Array.from(document.querySelectorAll("[data-size]"))
     .map((input) => ({
@@ -303,6 +268,7 @@ async function generateWorkbook() {
       normalizeSiteStock(siteRows, elements.modelSelect.value),
       normalizeTargetBySize(metaRows),
       normalizeBlockedColors(blockedRows),
+      elements.modelSelect.value,
     );
 
     exportWorkbook(sheets);
@@ -768,7 +734,7 @@ function tableFromRows(rows) {
   });
 }
 
-function calculateReplacement(fabric, siteStock, target, blocked) {
+function calculateReplacement(fabric, siteStock, target, blocked, modelName = "") {
   if (!target.length) {
     throw new Error("A meta não possui tamanhos preenchidos.");
   }
@@ -776,66 +742,104 @@ function calculateReplacement(fabric, siteStock, target, blocked) {
     throw new Error("O arquivo de estoque do site não possui estoque válido.");
   }
 
-  const fabricByKey = new Map(fabric.map((row) => [row.colorKey, row]));
-  const blockedKeys = new Set(blocked.map((row) => row.colorKey));
-  const siteColors = uniqueBy(siteStock, "colorKey").sort((a, b) => a.color.localeCompare(b.color));
-  const stockMap = new Map(siteStock.map((row) => [`${row.colorKey}|${row.size}`, row.stock]));
+  const sizes = target.map((row) => row.size);
+  const model = modelName || "Modelo selecionado";
+  const fabricByKey = new Map(fabric.map((row) => [row.compareKey, row]));
+  const blockedByKey = new Map(blocked.map((row) => [row.compareKey, row]));
+  const siteByKey = new Map();
+  const stockMap = new Map();
 
-  const replacement = [];
-  const audit = [];
-  const excluded = [];
-
-  siteColors.forEach((siteColor) => {
-    const fabricRow = fabricByKey.get(siteColor.colorKey);
-
-    if (blockedKeys.has(siteColor.colorKey)) {
-      excluded.push({ Cor: siteColor.color, Motivo: "Cor bloqueada para corte", Origem: "Estoque do site" });
-      return;
+  siteStock.forEach((row) => {
+    if (!siteByKey.has(row.compareKey)) {
+      siteByKey.set(row.compareKey, row);
     }
+    stockMap.set(`${row.compareKey}|${row.size}`, (stockMap.get(`${row.compareKey}|${row.size}`) || 0) + row.stock);
+  });
 
-    if (!fabricRow || !fabricRow.available) {
-      excluded.push({ Cor: siteColor.color, Motivo: "Sem tecido disponivel", Origem: "Estoque do site" });
-      return;
-    }
+  const finalRows = [];
+  const blockedRows = [];
+  const noFabricRows = [];
+  const finalKeys = new Set(
+    fabric
+      .filter((row) => row.available && !blockedByKey.has(row.compareKey))
+      .map((row) => row.compareKey),
+  );
 
-    target.forEach((targetRow) => {
-      const currentStock = stockMap.get(`${siteColor.colorKey}|${targetRow.size}`) || 0;
-      const quantity = Math.max(targetRow.target - currentStock, 0);
-      const row = {
-        Cor: siteColor.color,
-        Tamanho: targetRow.size,
-        "Estoque atual": niceNumber(currentStock),
-        Meta: niceNumber(targetRow.target),
-        Reposicao: niceNumber(quantity),
-        "Tecido disponivel": fabricRow.quantity === null ? "Sim" : niceNumber(fabricRow.quantity),
-      };
-      audit.push({ ...row, Status: "Reposicao calculada" });
-      if (quantity > 0) {
-        replacement.push(row);
-      }
+  finalKeys.forEach((key) => {
+    const row = buildWideColorRow({
+      model,
+      color: siteByKey.get(key)?.color || fabricByKey.get(key)?.color || "",
+      key,
+      sizes,
+      target,
+      stockMap,
     });
-  });
-
-  const siteColorKeys = new Set(siteColors.map((row) => row.colorKey));
-  fabric.forEach((fabricRow) => {
-    if (!siteColorKeys.has(fabricRow.colorKey) && !blockedKeys.has(fabricRow.colorKey)) {
-      excluded.push({ Cor: fabricRow.color, Motivo: "Cor nao existe no site", Origem: "Estoque de tecido" });
+    if (row["Total Repor"] > 0) {
+      finalRows.push(row);
     }
   });
 
-  blocked.forEach((blockedRow) => {
-    if (!siteColorKeys.has(blockedRow.colorKey)) {
-      excluded.push({ Cor: blockedRow.color, Motivo: "Cor bloqueada informada", Origem: "Bloqueadas" });
+  siteByKey.forEach((siteColor, key) => {
+    const row = buildWideColorRow({ model, color: siteColor.color, key, sizes, target, stockMap });
+
+    if (blockedByKey.has(key)) {
+      blockedRows.push({
+        Modelo: model,
+        "Cor no site": siteColor.color,
+        "Cor em estoque/lista": fabricByKey.get(key)?.color || blockedByKey.get(key)?.color || siteColor.color,
+        Motivo: "Ja cortada/bloqueada",
+        ...pickStockAndShortage(row, sizes, "Falta calculada"),
+      });
+      return;
+    }
+
+    if (!fabricByKey.has(key) && row["Total Repor"] > 0) {
+      noFabricRows.push({
+        Modelo: model,
+        "Cor no site": siteColor.color,
+        ...pickStockAndShortage(row, sizes, "Falta"),
+      });
     }
   });
 
-  const excludedUnique = uniqueObjects(excluded, ["Cor", "Motivo", "Origem"]);
+  blocked.forEach((blockedColor) => {
+    if (!siteByKey.has(blockedColor.compareKey)) {
+      const row = buildWideColorRow({
+        model,
+        color: blockedColor.color,
+        key: blockedColor.compareKey,
+        sizes,
+        target,
+        stockMap,
+      });
+      blockedRows.push({
+        Modelo: model,
+        "Cor no site": "",
+        "Cor em estoque/lista": blockedColor.color,
+        Motivo: "Cor bloqueada informada",
+        ...pickStockAndShortage(row, sizes, "Falta calculada"),
+      });
+    }
+  });
+
+  finalRows.sort((a, b) => String(a.Cor).localeCompare(String(b.Cor)));
+  blockedRows.sort((a, b) =>
+    String(a["Cor em estoque/lista"] || a["Cor no site"]).localeCompare(String(b["Cor em estoque/lista"] || b["Cor no site"])),
+  );
+  noFabricRows.sort((a, b) => String(a["Cor no site"]).localeCompare(String(b["Cor no site"])));
+
   return {
-    Resumo: buildSummary(replacement, excludedUnique),
-    Reposicao: replacement,
-    "Grade por cor": buildPivot(replacement),
-    Auditoria: audit,
-    Excluidas: excludedUnique,
+    "Reposição Final": finalRows,
+    Resumo: buildSummarySheet({ model, finalRows, blockedRows, noFabricRows }),
+    "Agrupado por Grade": buildGroupedByGrade(finalRows, sizes),
+    "Excluídas já cortadas": blockedRows.filter((row) => row["Total falta calculada"] > 0),
+    "Sem tecido disponível": noFabricRows.filter((row) => row["Total falta"] > 0),
+    "Cores em estoque": fabric.map((row) => ({
+      "Cor em estoque": row.color,
+      "Chave de comparação": row.compareKey,
+    })),
+    Critérios: buildCriteriaSheet({ model, target, sizes }),
+    __sizes: sizes,
   };
 }
 
@@ -846,7 +850,7 @@ function normalizeFabricStock(rows) {
 
   rows.forEach((row) => {
     const color = cleanText(row[colorColumn]);
-    const key = colorKey(color);
+    const key = colorCompareKey(color);
     if (!key) return;
 
     const quantityValue = quantityColumn ? row[quantityColumn] : null;
@@ -854,7 +858,8 @@ function normalizeFabricStock(rows) {
     const available = quantityColumn ? isAvailable(quantityValue) : true;
     const current = grouped.get(key) || {
       color,
-      colorKey: key,
+      colorKey: colorKey(color),
+      compareKey: key,
       quantity: null,
       available: false,
     };
@@ -888,8 +893,11 @@ function normalizeSiteStock(rows, selectedModel = "") {
   }
 
   filteredRows.forEach((row) => {
+    const color = cleanText(row[colorColumn]);
     normalized.push({
-      color: cleanText(row[colorColumn]),
+      color,
+      colorKey: colorKey(color),
+      compareKey: colorCompareKey(color),
       size: normalizeSize(row[sizeColumn]),
       stock: toNumber(row[virtualQuantityColumn]),
     });
@@ -897,10 +905,16 @@ function normalizeSiteStock(rows, selectedModel = "") {
 
   const grouped = new Map();
   normalized.forEach((row) => {
-    const key = colorKey(row.color);
+    const key = row.compareKey;
     if (!key || !row.size) return;
     const mapKey = `${key}|${row.size}`;
-    const current = grouped.get(mapKey) || { color: row.color, colorKey: key, size: row.size, stock: 0 };
+    const current = grouped.get(mapKey) || {
+      color: row.color,
+      colorKey: row.colorKey,
+      compareKey: key,
+      size: row.size,
+      stock: 0,
+    };
     current.stock += row.stock;
     grouped.set(mapKey, current);
   });
@@ -954,9 +968,9 @@ function normalizeBlockedColors(rows) {
 
   rows.forEach((row) => {
     const color = cleanText(row[colorColumn]);
-    const key = colorKey(color);
+    const key = colorCompareKey(color);
     if (key && !seen.has(key)) {
-      blocked.push({ color, colorKey: key });
+      blocked.push({ color, colorKey: colorKey(color), compareKey: key });
       seen.add(key);
     }
   });
@@ -964,79 +978,207 @@ function normalizeBlockedColors(rows) {
   return blocked;
 }
 
-function buildPivot(replacement) {
-  const byColor = new Map();
-  replacement.forEach((row) => {
-    const current = byColor.get(row.Cor) || { Cor: row.Cor };
-    current[row.Tamanho] = (current[row.Tamanho] || 0) + toNumber(row.Reposicao);
-    byColor.set(row.Cor, current);
-  });
+function buildWideColorRow({ model, color, key, sizes, target, stockMap }) {
+  const row = { Modelo: model, Cor: color };
+  let total = 0;
 
-  const sizes = Array.from(new Set(replacement.map((row) => row.Tamanho))).sort((a, b) => sizeRank(a) - sizeRank(b));
-  return Array.from(byColor.values()).map((row) => {
-    let total = 0;
-    sizes.forEach((size) => {
-      row[size] = niceNumber(row[size] || 0);
-      total += toNumber(row[size]);
-    });
-    row.Total = niceNumber(total);
-    return row;
+  sizes.forEach((size) => {
+    row[`Estoque ${size}`] = niceNumber(stockMap.get(`${key}|${size}`) || 0);
   });
+  target.forEach((targetRow) => {
+    row[`Meta ${targetRow.size}`] = niceNumber(targetRow.target);
+  });
+  target.forEach((targetRow) => {
+    const currentStock = toNumber(row[`Estoque ${targetRow.size}`]);
+    const replacement = Math.max(targetRow.target - currentStock, 0);
+    row[`Repor ${targetRow.size}`] = niceNumber(replacement);
+    total += replacement;
+  });
+  row["Total Repor"] = niceNumber(total);
+  return row;
 }
 
-function buildSummary(replacement, excluded) {
-  const totalPieces = replacement.reduce((total, row) => total + toNumber(row.Reposicao), 0);
-  const colors = new Set(replacement.map((row) => row.Cor)).size;
+function pickStockAndShortage(row, sizes, shortagePrefix) {
+  const output = {};
+  let total = 0;
+  sizes.forEach((size) => {
+    output[`Estoque ${size}`] = row[`Estoque ${size}`] ?? 0;
+  });
+  sizes.forEach((size) => {
+    const value = row[`Repor ${size}`] ?? 0;
+    output[`${shortagePrefix} ${size}`] = value;
+    total += toNumber(value);
+  });
+  output[`Total ${shortagePrefix.toLowerCase()}`] = niceNumber(total);
+  return output;
+}
+
+function buildSummarySheet({ model, finalRows, blockedRows, noFabricRows }) {
+  const totalPieces = finalRows.reduce((total, row) => total + toNumber(row["Total Repor"]), 0);
   return [
-    { Indicador: "Pecas para repor", Valor: niceNumber(totalPieces) },
-    { Indicador: "Cores com reposicao", Valor: colors },
-    { Indicador: "Linhas de reposicao", Valor: replacement.length },
-    { Indicador: "Cores/linhas excluidas", Valor: excluded.length },
+    { "Resumo da Avaliação": "Modelo", Valor: model },
+    { "Resumo da Avaliação": "Cores para repor", Valor: finalRows.length },
+    { "Resumo da Avaliação": "Peças totais a repor", Valor: niceNumber(totalPieces) },
+    { "Resumo da Avaliação": "Cores bloqueadas/já cortadas", Valor: blockedRows.length },
+    { "Resumo da Avaliação": "Cores com falta mas sem tecido", Valor: noFabricRows.length },
+    {
+      "Resumo da Avaliação": "Regra de cálculo",
+      Valor: "Repor = MAX(Meta - Estoque, 0). Estoque negativo entra na conta.",
+    },
+    { "Resumo da Avaliação": "Tamanho equivalente", Valor: "XG foi tratado como G1 quando apareceu." },
+    {
+      "Resumo da Avaliação": "Filtro de tecido",
+      Valor: "Só entram na reposição cores presentes no estoque de tecido e não bloqueadas.",
+    },
+  ];
+}
+
+function buildGroupedByGrade(finalRows, sizes) {
+  const groups = new Map();
+  finalRows.forEach((row) => {
+    const values = sizes.map((size) => toNumber(row[`Repor ${size}`]));
+    const key = values.join("|");
+    const current = groups.get(key) || {
+      values,
+      total: toNumber(row["Total Repor"]),
+      colors: [],
+    };
+    current.colors.push(row.Cor);
+    groups.set(key, current);
+  });
+
+  return Array.from(groups.values())
+    .sort((a, b) => b.total - a.total || b.colors.length - a.colors.length)
+    .map((group) => {
+      const row = {};
+      sizes.forEach((size, index) => {
+        row[`Repor ${size}`] = niceNumber(group.values[index]);
+      });
+      row["Total por cor"] = niceNumber(group.total);
+      row["Qtde cores"] = group.colors.length;
+      row["Cores com a mesma grade"] = group.colors.sort((a, b) => a.localeCompare(b)).join(", ");
+      return row;
+    });
+}
+
+function buildCriteriaSheet({ model, target, sizes }) {
+  return [
+    { Critério: "Modelo", Valor: model },
+    { Critério: "Meta", Valor: sizes.map((size) => `${size}: ${target.find((row) => row.size === size)?.target || 0}`).join(" / ") },
+    { Critério: "Estoque usado", Valor: "Arquivo de estoque do site enviado no passo 2; coluna usada: Qtd.Virtual." },
+    { Critério: "Cores em estoque", Valor: "Arquivo de estoque de tecido enviado no passo 1." },
+    { Critério: "Cores bloqueadas", Valor: "Arquivo ou texto informado no passo 4." },
+    { Critério: "Negativo", Valor: "Quantidade negativa no site entra na conta." },
+    { Critério: "XG", Valor: "XG = G1." },
+    { Critério: "Cálculo por tamanho", Valor: "MAX(meta - estoque, 0)." },
+    {
+      Critério: "Cores ausentes do site",
+      Valor: "Se a cor está em tecido, não está bloqueada e não existe no site, entra como estoque 0.",
+    },
   ];
 }
 
 function exportWorkbook(sheets) {
   const workbook = XLSX.utils.book_new();
-  appendSheet(workbook, "Resumo", sheets.Resumo, ["Indicador", "Valor"]);
-  appendSheet(workbook, "Reposicao", sheets.Reposicao, [
+  const sizes = sheets.__sizes || [];
+  const finalHeaders = [
+    "Modelo",
     "Cor",
-    "Tamanho",
-    "Estoque atual",
-    "Meta",
-    "Reposicao",
-    "Tecido disponivel",
-  ]);
+    ...sizes.map((size) => `Estoque ${size}`),
+    ...sizes.map((size) => `Meta ${size}`),
+    ...sizes.map((size) => `Repor ${size}`),
+    "Total Repor",
+  ];
+  const groupedHeaders = [
+    ...sizes.map((size) => `Repor ${size}`),
+    "Total por cor",
+    "Qtde cores",
+    "Cores com a mesma grade",
+  ];
+  const excludedHeaders = [
+    "Modelo",
+    "Cor no site",
+    "Cor em estoque/lista",
+    "Motivo",
+    ...sizes.map((size) => `Estoque ${size}`),
+    ...sizes.map((size) => `Falta calculada ${size}`),
+    "Total falta calculada",
+  ];
+  const noFabricHeaders = [
+    "Modelo",
+    "Cor no site",
+    ...sizes.map((size) => `Estoque ${size}`),
+    ...sizes.map((size) => `Falta ${size}`),
+    "Total falta",
+  ];
 
-  const pivotHeaders = columnsOf(sheets["Grade por cor"]);
-  appendSheet(workbook, "Grade por cor", sheets["Grade por cor"], pivotHeaders.length ? pivotHeaders : ["Cor", "Total"]);
-  appendSheet(workbook, "Auditoria", sheets.Auditoria, [
-    "Cor",
-    "Tamanho",
-    "Estoque atual",
-    "Meta",
-    "Reposicao",
-    "Tecido disponivel",
-    "Status",
-  ]);
-  appendSheet(workbook, "Excluidas", sheets.Excluidas, ["Cor", "Motivo", "Origem"]);
+  appendStyledSheet(workbook, "Reposição Final", sheets["Reposição Final"], finalHeaders, {
+    widths: [18, 28, ...sizes.map(() => 11), ...sizes.map(() => 10), ...sizes.map(() => 10), 12],
+  });
+  appendStyledSheet(workbook, "Resumo", sheets.Resumo, ["Resumo da Avaliação", "Valor"], {
+    widths: [26, 58],
+  });
+  appendStyledSheet(workbook, "Agrupado por Grade", sheets["Agrupado por Grade"], groupedHeaders, {
+    widths: [...sizes.map(() => 10), 13, 12, 70],
+    wrapColumns: [groupedHeaders.length - 1],
+  });
+  appendStyledSheet(workbook, "Excluídas já cortadas", sheets["Excluídas já cortadas"], excludedHeaders, {
+    widths: [18, 28, 25, 18, ...sizes.map(() => 11), ...sizes.map(() => 17), 19],
+  });
+  appendStyledSheet(workbook, "Sem tecido disponível", sheets["Sem tecido disponível"], noFabricHeaders, {
+    widths: [18, 28, ...sizes.map(() => 11), ...sizes.map(() => 10), 12],
+  });
+  appendStyledSheet(workbook, "Cores em estoque", sheets["Cores em estoque"], ["Cor em estoque", "Chave de comparação"], {
+    widths: [30, 22],
+  });
+  appendStyledSheet(workbook, "Critérios", sheets.Critérios, ["Critério", "Valor"], {
+    widths: [20, 72],
+  });
 
   XLSX.writeFile(workbook, `reposicao-estoque-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
-function appendSheet(workbook, name, rows, headers) {
-  const aoa = [headers, ...rows.map((row) => headers.map((header) => row[header] ?? ""))];
+function appendStyledSheet(workbook, name, rows, headers, options = {}) {
+  const safeRows = rows.length ? rows : [];
+  const aoa = [headers, ...safeRows.map((row) => headers.map((header) => row[header] ?? ""))];
   const worksheet = XLSX.utils.aoa_to_sheet(aoa);
-  worksheet["!cols"] = headers.map((header, columnIndex) => ({
-    wch: Math.min(
-      Math.max(
-        String(header).length + 2,
-        ...rows.map((row) => String(row[headers[columnIndex]] ?? "").length + 2),
-        12,
-      ),
-      34,
-    ),
+  worksheet["!cols"] = headers.map((header, index) => ({
+    wch: options.widths?.[index] || Math.min(Math.max(String(header).length + 2, 12), 34),
   }));
+  worksheet["!autofilter"] = {
+    ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(0, aoa.length - 1), c: headers.length - 1 } }),
+  };
+  worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+  styleWorksheet(worksheet, aoa.length, headers.length, options);
   XLSX.utils.book_append_sheet(workbook, worksheet, name);
+}
+
+function styleWorksheet(worksheet, rowCount, columnCount, options = {}) {
+  const headerStyle = {
+    fill: { fgColor: { rgb: "1F4E78" } },
+    font: { bold: true, color: { rgb: "FFFFFF" } },
+    alignment: { horizontal: "center", vertical: "center", wrapText: true },
+  };
+  const numberStyle = { numFmt: "0", alignment: { horizontal: "center" } };
+  const textStyle = { alignment: { vertical: "top", wrapText: false } };
+  const wrapSet = new Set(options.wrapColumns || []);
+
+  for (let column = 0; column < columnCount; column += 1) {
+    const cellRef = XLSX.utils.encode_cell({ r: 0, c: column });
+    worksheet[cellRef].s = headerStyle;
+  }
+
+  for (let row = 1; row < rowCount; row += 1) {
+    for (let column = 0; column < columnCount; column += 1) {
+      const cellRef = XLSX.utils.encode_cell({ r: row, c: column });
+      const cell = worksheet[cellRef];
+      if (!cell) continue;
+      cell.s =
+        typeof cell.v === "number"
+          ? numberStyle
+          : { ...textStyle, alignment: { ...textStyle.alignment, wrapText: wrapSet.has(column) } };
+    }
+  }
 }
 
 function findColumn(rows, aliases, context, required) {
@@ -1153,6 +1295,15 @@ function normalizeLabel(value) {
 
 function colorKey(value) {
   return stripAccents(value).toUpperCase().replace(/[^A-Z0-9]+/g, "");
+}
+
+function colorCompareKey(value) {
+  const text = stripAccents(value).toUpperCase();
+  const numericCodes = text.match(/\b\d{3,5}\b/g);
+  if (numericCodes?.length) {
+    return numericCodes[numericCodes.length - 1];
+  }
+  return colorKey(text);
 }
 
 function normalizeOcrLine(line) {

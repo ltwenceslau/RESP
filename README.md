@@ -93,7 +93,7 @@ Para cada cor que existe no site, possui tecido disponível e não está bloquea
 reposicao = max(meta_por_tamanho - qtd_virtual_do_site, 0)
 ```
 
-Cores que não existem no site, cores sem tecido disponível e cores bloqueadas ficam fora da reposição.
+Cores que existem no tecido, mas não aparecem no site, entram na reposição com estoque zero. Cores sem tecido disponível e cores bloqueadas ficam fora da aba `Reposição Final` e aparecem nas abas de controle.
 
 ## Saída
 
@@ -101,11 +101,13 @@ O arquivo baixado é uma planilha `.xlsx` com as abas:
 
 | Aba | Conteúdo |
 | --- | --- |
-| `Resumo` | Totais principais. |
-| `Reposicao` | Somente linhas com reposição maior que zero. |
-| `Grade por cor` | Reposição consolidada por cor e tamanho. |
-| `Auditoria` | Todas as combinações calculadas. |
-| `Excluidas` | Cores filtradas e motivo da exclusão. |
+| `Reposição Final` | Resultado principal em grade: Modelo, Cor, Estoque por tamanho, Meta por tamanho, Repor por tamanho e Total Repor. |
+| `Resumo` | Totais principais e regras aplicadas. |
+| `Agrupado por Grade` | Agrupa cores que possuem a mesma distribuição de reposição. |
+| `Excluídas já cortadas` | Cores bloqueadas, com estoque e falta calculada. |
+| `Sem tecido disponível` | Cores do site com falta, mas sem tecido disponível. |
+| `Cores em estoque` | Lista de cores do tecido e chave de comparação usada. |
+| `Critérios` | Modelo, meta, arquivos usados e regras de cálculo. |
 
 ## Como publicar
 
