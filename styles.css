@@ -245,6 +245,60 @@ h3 {
   overflow-wrap: anywhere;
 }
 
+.model-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.75fr);
+  gap: 14px;
+  align-items: end;
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid #d4dde9;
+  border-radius: 8px;
+  background: #f9fbfd;
+}
+
+.model-picker[hidden] {
+  display: none;
+}
+
+.model-picker__copy strong,
+.model-picker__copy span,
+.model-picker label span {
+  display: block;
+}
+
+.model-picker__copy strong {
+  margin-bottom: 6px;
+  color: #101827;
+  font-size: 1rem;
+}
+
+.model-picker__copy span {
+  color: #5f6e83;
+  line-height: 1.45;
+}
+
+.model-picker label {
+  display: grid;
+  gap: 7px;
+}
+
+.model-picker label span {
+  color: #43546b;
+  font-size: 0.86rem;
+  font-weight: 750;
+}
+
+.model-picker select {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 10px;
+  border: 1px solid #cfd9e6;
+  border-radius: 8px;
+  color: #172033;
+  background: #ffffff;
+}
+
 .meta-toolbar {
   display: flex;
   align-items: end;
@@ -534,7 +588,8 @@ summary {
   .stepper,
   .format-grid,
   .summary-grid,
-  .blocked-layout {
+  .blocked-layout,
+  .model-picker {
     grid-template-columns: 1fr;
   }
 

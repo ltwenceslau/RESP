@@ -68,10 +68,23 @@
           <span class="upload-number">2</span>
           <span class="upload-copy">
             <strong>Arquivo do estoque no site</strong>
-            <small id="siteFileName">Aceita Cor, Tamanho, Estoque ou grade aberta: Cor, P, M, G, XG.</small>
+            <small id="siteFileName">Usa Nome Estoque, Cor, Tamanho e Qtd.Virtual.</small>
           </span>
           <input id="siteFile" type="file" accept=".pdf,.xls,.xlsx,.xlsm,.csv,.png" required>
         </label>
+
+        <div class="model-picker" id="modelPicker" hidden>
+          <div class="model-picker__copy">
+            <strong>Modelo para reposição</strong>
+            <span id="modelNotice">Envie o estoque do site para listar os modelos encontrados.</span>
+          </div>
+          <label>
+            <span>Nome Estoque</span>
+            <select id="modelSelect">
+              <option value="">Selecione um modelo</option>
+            </select>
+          </label>
+        </div>
       </section>
 
       <section class="wizard-step" data-step="3">
@@ -178,7 +191,7 @@
           </div>
           <div>
             <strong>Site</strong>
-            <span>Colunas: Cor, Tamanho, Estoque. Também aceita grade aberta: Cor, P, M, G, XG.</span>
+            <span>Colunas: Nome Estoque, Cor, Tamanho e Qtd.Virtual. Qtd.Real é ignorada.</span>
           </div>
           <div>
             <strong>Meta</strong>

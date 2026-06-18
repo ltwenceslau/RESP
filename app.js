@@ -13,6 +13,15 @@ const COLOR_ALIASES = new Set([
   "nome cor",
 ]);
 const SIZE_ALIASES = new Set(["tamanho", "tam", "grade", "size"]);
+const MODEL_ALIASES = new Set(["nome estoque", "nome do estoque", "modelo", "produto"]);
+const VIRTUAL_QUANTITY_ALIASES = new Set([
+  "qtd virtual",
+  "qtd. virtual",
+  "qtdvirtual",
+  "quantidade virtual",
+  "qtde virtual",
+  "estoque virtual",
+]);
 const QUANTITY_ALIASES = new Set([
   "estoque",
   "estoque atual",
@@ -41,6 +50,9 @@ const elements = {
   fabricFileName: document.getElementById("fabricFileName"),
   siteFileName: document.getElementById("siteFileName"),
   blockedFileName: document.getElementById("blockedFileName"),
+  modelPicker: document.getElementById("modelPicker"),
+  modelNotice: document.getElementById("modelNotice"),
+  modelSelect: document.getElementById("modelSelect"),
   adultSizes: document.getElementById("adultSizes"),
   kidsSizes: document.getElementById("kidsSizes"),
   bulkMetaValue: document.getElementById("bulkMetaValue"),
@@ -58,6 +70,8 @@ const elements = {
 };
 
 let currentStep = 1;
+let siteRowsCache = null;
+let siteFileSignature = "";
 
 if (window.pdfjsLib) {
   window.pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -95,6 +109,11 @@ function setupWizard() {
   elements.applyKidsMeta.addEventListener("click", () => applyBulkMeta(KIDS_SIZES));
   elements.clearMeta.addEventListener("click", clearMeta);
   elements.blockedText.addEventListener("input", updateSummary);
+  elements.modelSelect.addEventListener("change", () => {
+    updateSummary();
+    updateStepper();
+    setStatus("", "");
+  });
 
   elements.form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -126,7 +145,7 @@ function renderSizeInputs(container, sizes) {
 }
 
 function setupFileInput(input, label) {
-  input.addEventListener("change", () => {
+  input.addEventListener("change", async () => {
     const card = input.closest(".upload-card");
     if (input.files.length) {
       label.textContent = input.files[0].name;
@@ -134,9 +153,14 @@ function setupFileInput(input, label) {
     } else {
       card.classList.remove("is-filled");
     }
+    if (input === elements.siteFile) {
+      await handleSiteFileChange();
+    }
     updateSummary();
     updateStepper();
-    setStatus("", "");
+    if (input !== elements.siteFile) {
+      setStatus("", "");
+    }
   });
 }
 
@@ -180,6 +204,10 @@ function validateStep(step, showMessage = true) {
   }
   if (step === 2 && !elements.siteFile.files.length) {
     if (showMessage) setStatus("error", "Envie o arquivo do estoque do site para continuar.");
+    return false;
+  }
+  if (step === 2 && !elements.modelSelect.value) {
+    if (showMessage) setStatus("error", "Selecione o modelo em Nome Estoque para continuar.");
     return false;
   }
   if (step === 3 && !readMetaEntries().length) {
@@ -228,7 +256,12 @@ function readMetaEntries() {
 
 function updateSummary() {
   elements.summaryFabric.textContent = elements.fabricFile.files[0]?.name || "Aguardando arquivo";
-  elements.summarySite.textContent = elements.siteFile.files[0]?.name || "Aguardando arquivo";
+  const selectedModel = elements.modelSelect.value;
+  if (elements.siteFile.files[0] && selectedModel) {
+    elements.summarySite.textContent = `${elements.siteFile.files[0].name} | ${selectedModel}`;
+  } else {
+    elements.summarySite.textContent = elements.siteFile.files[0]?.name || "Aguardando arquivo";
+  }
 
   const meta = readMetaEntries();
   const totalMeta = meta.reduce((total, row) => total + row.Meta, 0);
@@ -261,13 +294,13 @@ async function generateWorkbook() {
     setStatus("loading", "Lendo arquivos e calculando reposição...");
 
     const fabricRows = await readUploadedTable(elements.fabricFile.files[0], "malha");
-    const siteRows = await readUploadedTable(elements.siteFile.files[0], "estoqueSite");
+    const siteRows = await getSiteRows();
     const blockedRows = await readBlockedRows();
     const metaRows = readMetaEntries();
 
     const sheets = calculateReplacement(
       normalizeFabricStock(fabricRows),
-      normalizeSiteStock(siteRows),
+      normalizeSiteStock(siteRows, elements.modelSelect.value),
       normalizeTargetBySize(metaRows),
       normalizeBlockedColors(blockedRows),
     );
@@ -279,6 +312,95 @@ async function generateWorkbook() {
   } finally {
     elements.processButton.disabled = false;
   }
+}
+
+async function handleSiteFileChange() {
+  siteRowsCache = null;
+  siteFileSignature = "";
+  resetModelSelect("Lendo modelos do arquivo...");
+
+  if (!elements.siteFile.files.length) {
+    resetModelSelect("Envie o estoque do site para listar os modelos encontrados.");
+    return;
+  }
+
+  try {
+    ensureLibraries();
+    const rows = await getSiteRows(true);
+    const models = extractSiteModels(rows);
+    populateModelSelect(models);
+    setStatus("success", `${models.length} modelos encontrados em Nome Estoque.`);
+  } catch (error) {
+    resetModelSelect("Não consegui listar os modelos. Confira se existe a coluna Nome Estoque.");
+    setStatus("error", error.message || "Não foi possível ler os modelos do estoque do site.");
+  }
+}
+
+async function getSiteRows(forceReload = false) {
+  const file = elements.siteFile.files[0];
+  if (!file) {
+    throw new Error("Envie o arquivo do estoque do site.");
+  }
+
+  const signature = `${file.name}|${file.size}|${file.lastModified}`;
+  if (!forceReload && siteRowsCache && siteFileSignature === signature) {
+    return siteRowsCache;
+  }
+
+  siteRowsCache = await readUploadedTable(file, "estoqueSite");
+  siteFileSignature = signature;
+  return siteRowsCache;
+}
+
+function resetModelSelect(message) {
+  elements.modelPicker.hidden = false;
+  elements.modelSelect.innerHTML = '<option value="">Selecione um modelo</option>';
+  elements.modelSelect.value = "";
+  elements.modelNotice.textContent = message;
+}
+
+function populateModelSelect(models) {
+  elements.modelPicker.hidden = false;
+  elements.modelSelect.innerHTML = '<option value="">Selecione um modelo</option>';
+
+  models.forEach((model) => {
+    const option = document.createElement("option");
+    option.value = model.name;
+    option.textContent = `${model.name} (${model.count} linhas)`;
+    elements.modelSelect.appendChild(option);
+  });
+
+  if (models.length === 1) {
+    elements.modelSelect.value = models[0].name;
+  }
+
+  elements.modelNotice.textContent =
+    models.length === 1
+      ? "Um modelo encontrado e selecionado automaticamente."
+      : `${models.length} modelos encontrados. Escolha qual será reposto.`;
+  updateSummary();
+  updateStepper();
+}
+
+function extractSiteModels(rows) {
+  const modelColumn = findColumn(rows, MODEL_ALIASES, "estoque do site", true);
+  const counts = new Map();
+
+  rows.forEach((row) => {
+    const model = cleanText(row[modelColumn]);
+    if (model) {
+      counts.set(model, (counts.get(model) || 0) + 1);
+    }
+  });
+
+  const models = Array.from(counts.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  if (!models.length) {
+    throw new Error("A coluna Nome Estoque não possui modelos preenchidos.");
+  }
+  return models;
 }
 
 async function readBlockedRows() {
@@ -751,35 +873,27 @@ function normalizeFabricStock(rows) {
   return result;
 }
 
-function normalizeSiteStock(rows) {
+function normalizeSiteStock(rows, selectedModel = "") {
+  const modelColumn = findColumn(rows, MODEL_ALIASES, "estoque do site", true);
   const colorColumn = findColumn(rows, COLOR_ALIASES, "estoque do site", true);
-  const sizeColumn = findColumn(rows, SIZE_ALIASES, "estoque do site", false);
-  const quantityColumn = findColumn(rows, QUANTITY_ALIASES, "estoque do site", false);
+  const sizeColumn = findColumn(rows, SIZE_ALIASES, "estoque do site", true);
+  const virtualQuantityColumn = findColumn(rows, VIRTUAL_QUANTITY_ALIASES, "estoque do site", true);
+  const filteredRows = selectedModel
+    ? rows.filter((row) => cleanText(row[modelColumn]) === selectedModel)
+    : rows;
   const normalized = [];
 
-  if (sizeColumn && quantityColumn) {
-    rows.forEach((row) => {
-      normalized.push({
-        color: cleanText(row[colorColumn]),
-        size: normalizeSize(row[sizeColumn]),
-        stock: toNumber(row[quantityColumn]),
-      });
-    });
-  } else {
-    const sizeColumns = columnsOf(rows).filter((column) => column !== colorColumn && isSizeHeader(column));
-    if (!sizeColumns.length) {
-      throw new Error("O estoque do site precisa ter Cor, Tamanho e Estoque, ou uma grade com uma coluna por tamanho.");
-    }
-    rows.forEach((row) => {
-      sizeColumns.forEach((column) => {
-        normalized.push({
-          color: cleanText(row[colorColumn]),
-          size: normalizeSize(column),
-          stock: toNumber(row[column]),
-        });
-      });
-    });
+  if (!filteredRows.length) {
+    throw new Error("Nenhuma linha encontrada para o modelo selecionado em Nome Estoque.");
   }
+
+  filteredRows.forEach((row) => {
+    normalized.push({
+      color: cleanText(row[colorColumn]),
+      size: normalizeSize(row[sizeColumn]),
+      stock: toNumber(row[virtualQuantityColumn]),
+    });
+  });
 
   const grouped = new Map();
   normalized.forEach((row) => {

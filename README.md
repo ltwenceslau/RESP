@@ -9,7 +9,7 @@ O processamento acontece no navegador do usuário. Os arquivos enviados não sã
 O sistema trabalha em 5 passos:
 
 1. `Tecido`: upload do estoque de tecido ou malha disponível.
-2. `Site`: upload do estoque atual do produto no site.
+2. `Site`: upload do estoque atual do produto no site e escolha do modelo em `Nome Estoque`.
 3. `Meta`: preenchimento manual da meta por tamanho.
 4. `Bloqueadas`: upload ou digitação das cores que não podem ser cortadas.
 5. `Gerar`: conferência e download da planilha final.
@@ -57,20 +57,22 @@ Se a coluna `Quantidade` não existir, toda cor listada será considerada dispon
 
 ## Entrada: estoque do site
 
-Formato longo:
+O sistema procura os modelos na coluna `Nome Estoque`. Depois do upload, ele mostra uma lista para escolher qual modelo será reposto.
 
-| Cor | Tamanho | Estoque |
-| --- | --- | --- |
-| Azul Marinho | P | 2 |
-| Azul Marinho | XG | 1 |
+Colunas usadas:
 
-Formato em grade:
+| Nome Estoque | Cor | Tamanho | Qtd.Virtual |
+| --- | --- | --- | --- |
+| TSHIRT BORDADA CAVALOS NAS MANGAS | Off White 8006 | P | 29 |
+| TSHIRT BORDADA CAVALOS NAS MANGAS | Off White 8006 | XG | 19 |
 
-| Cor | P | M | G | XG |
-| --- | --- | --- | --- | --- |
-| Azul Marinho | 2 | 4 | 1 | 1 |
+Importante:
 
-`XG` é tratado como `G1`.
+- A coluna `Qtd.Real` é ignorada.
+- A coluna usada no cálculo é sempre `Qtd.Virtual`.
+- `XG` é tratado como `G1`.
+
+Outras colunas, como código, categoria, preço ou endereço de estoque, podem existir no arquivo, mas não entram no cálculo.
 
 ## Entrada: cores bloqueadas
 
@@ -88,7 +90,7 @@ Esse passo é opcional.
 Para cada cor que existe no site, possui tecido disponível e não está bloqueada:
 
 ```text
-reposicao = max(meta_por_tamanho - estoque_atual_no_site, 0)
+reposicao = max(meta_por_tamanho - qtd_virtual_do_site, 0)
 ```
 
 Cores que não existem no site, cores sem tecido disponível e cores bloqueadas ficam fora da reposição.
