@@ -16,68 +16,164 @@
       <span class="badge">GitHub Pages</span>
     </header>
 
-    <section class="intro">
-      <p>
-        Envie os quatro arquivos, gere a reposição por cor e tamanho e baixe a planilha final.
-        O processamento acontece no próprio navegador.
-      </p>
-    </section>
+    <nav class="stepper" aria-label="Etapas do processo">
+      <button class="step-pill is-active" type="button" data-step-target="1">
+        <span>1</span>
+        <strong>Tecido</strong>
+      </button>
+      <button class="step-pill" type="button" data-step-target="2">
+        <span>2</span>
+        <strong>Site</strong>
+      </button>
+      <button class="step-pill" type="button" data-step-target="3">
+        <span>3</span>
+        <strong>Meta</strong>
+      </button>
+      <button class="step-pill" type="button" data-step-target="4">
+        <span>4</span>
+        <strong>Bloqueadas</strong>
+      </button>
+      <button class="step-pill" type="button" data-step-target="5">
+        <span>5</span>
+        <strong>Gerar</strong>
+      </button>
+    </nav>
 
-    <form id="uploadForm" class="workspace">
-      <section class="upload-grid" aria-label="Arquivos necessários">
-        <label class="upload-card" for="malha">
-          <span class="step">1</span>
-          <span class="upload-copy">
-            <strong>Estoque de malha</strong>
-            <small id="malhaName">PDF, XLSX ou CSV com cores disponíveis.</small>
-          </span>
-          <input id="malha" name="malha" type="file" accept=".pdf,.xlsx,.xlsm,.csv" required>
-        </label>
+    <form id="wizardForm" class="wizard">
+      <section class="wizard-step is-active" data-step="1">
+        <div class="step-heading">
+          <p class="step-kicker">Passo 1</p>
+          <h2>Estoque de tecido</h2>
+          <p>Envie o arquivo com as cores de tecido ou malha disponíveis.</p>
+        </div>
 
-        <label class="upload-card" for="estoqueSite">
-          <span class="step">2</span>
+        <label class="upload-card" for="fabricFile">
+          <span class="upload-number">1</span>
           <span class="upload-copy">
-            <strong>Estoque no site</strong>
-            <small id="estoqueSiteName">Produto atual por cor e tamanho.</small>
+            <strong>Arquivo do estoque de tecido</strong>
+            <small id="fabricFileName">PDF, XLS, XLSX, CSV ou PNG com colunas como Cor e Quantidade.</small>
           </span>
-          <input id="estoqueSite" name="estoqueSite" type="file" accept=".pdf,.xlsx,.xlsm,.csv" required>
-        </label>
-
-        <label class="upload-card" for="meta">
-          <span class="step">3</span>
-          <span class="upload-copy">
-            <strong>Meta por tamanho</strong>
-            <small id="metaName">Quantidade desejada em cada tamanho.</small>
-          </span>
-          <input id="meta" name="meta" type="file" accept=".pdf,.xlsx,.xlsm,.csv" required>
-        </label>
-
-        <label class="upload-card" for="bloqueadas">
-          <span class="step">4</span>
-          <span class="upload-copy">
-            <strong>Cores bloqueadas</strong>
-            <small id="bloqueadasName">Cores que não podem ser cortadas.</small>
-          </span>
-          <input id="bloqueadas" name="bloqueadas" type="file" accept=".pdf,.xlsx,.xlsm,.csv" required>
+          <input id="fabricFile" type="file" accept=".pdf,.xls,.xlsx,.xlsm,.csv,.png" required>
         </label>
       </section>
 
-      <aside class="actions">
-        <div>
-          <h2>Resultado</h2>
-          <p>A planilha gerada inclui reposição, grade por cor, auditoria e motivos de exclusão.</p>
+      <section class="wizard-step" data-step="2">
+        <div class="step-heading">
+          <p class="step-kicker">Passo 2</p>
+          <h2>Estoque do produto no site</h2>
+          <p>Envie o estoque atual do produto no site, por cor e tamanho.</p>
         </div>
-        <button id="processButton" type="submit">Gerar planilha</button>
+
+        <label class="upload-card" for="siteFile">
+          <span class="upload-number">2</span>
+          <span class="upload-copy">
+            <strong>Arquivo do estoque no site</strong>
+            <small id="siteFileName">Aceita Cor, Tamanho, Estoque ou grade aberta: Cor, P, M, G, XG.</small>
+          </span>
+          <input id="siteFile" type="file" accept=".pdf,.xls,.xlsx,.xlsm,.csv,.png" required>
+        </label>
+      </section>
+
+      <section class="wizard-step" data-step="3">
+        <div class="step-heading">
+          <p class="step-kicker">Passo 3</p>
+          <h2>Meta por tamanho</h2>
+          <p>Digite a quantidade desejada em cada tamanho. Tamanhos sem número ficam fora da meta.</p>
+        </div>
+
+        <div class="meta-toolbar">
+          <label>
+            <span>Aplicar valor rápido</span>
+            <input id="bulkMetaValue" type="number" min="0" step="1" placeholder="Ex.: 6">
+          </label>
+          <button id="applyAdultMeta" class="secondary-action" type="button">Adulto</button>
+          <button id="applyKidsMeta" class="secondary-action" type="button">Infantil</button>
+          <button id="clearMeta" class="ghost-action" type="button">Limpar</button>
+        </div>
+
+        <div class="size-section">
+          <div class="size-section__title">
+            <h3>Adulto</h3>
+            <small>P ao G3</small>
+          </div>
+          <div id="adultSizes" class="size-grid" aria-label="Metas adulto"></div>
+        </div>
+
+        <div class="size-section">
+          <div class="size-section__title">
+            <h3>Infantil</h3>
+            <small>2 ao 16 anos</small>
+          </div>
+          <div id="kidsSizes" class="size-grid" aria-label="Metas infantil"></div>
+        </div>
+      </section>
+
+      <section class="wizard-step" data-step="4">
+        <div class="step-heading">
+          <p class="step-kicker">Passo 4</p>
+          <h2>Cores bloqueadas</h2>
+          <p>Envie um arquivo ou digite as cores que não podem ser cortadas. Este passo pode ficar vazio.</p>
+        </div>
+
+        <div class="blocked-layout">
+          <label class="upload-card compact" for="blockedFile">
+            <span class="upload-number">4</span>
+            <span class="upload-copy">
+              <strong>Arquivo de bloqueadas</strong>
+              <small id="blockedFileName">PDF, XLS, XLSX, CSV ou PNG com uma coluna Cor.</small>
+            </span>
+            <input id="blockedFile" type="file" accept=".pdf,.xls,.xlsx,.xlsm,.csv,.png">
+          </label>
+
+          <label class="textarea-card">
+            <span>Cores digitadas</span>
+            <textarea id="blockedText" rows="8" placeholder="Uma cor por linha&#10;Ex.: Verde Militar&#10;Rosa Seco"></textarea>
+          </label>
+        </div>
+      </section>
+
+      <section class="wizard-step" data-step="5">
+        <div class="step-heading">
+          <p class="step-kicker">Passo 5</p>
+          <h2>Gerar planilha</h2>
+          <p>Confira os arquivos e gere a planilha final de reposição.</p>
+        </div>
+
+        <div class="summary-grid">
+          <div>
+            <strong>Tecido</strong>
+            <span id="summaryFabric">Aguardando arquivo</span>
+          </div>
+          <div>
+            <strong>Site</strong>
+            <span id="summarySite">Aguardando arquivo</span>
+          </div>
+          <div>
+            <strong>Meta</strong>
+            <span id="summaryMeta">Nenhum tamanho preenchido</span>
+          </div>
+          <div>
+            <strong>Bloqueadas</strong>
+            <span id="summaryBlocked">Opcional</span>
+          </div>
+        </div>
+
+        <button id="processButton" class="primary-action" type="submit">Gerar planilha</button>
         <div id="status" class="status" role="status" aria-live="polite"></div>
-      </aside>
+      </section>
+
+      <footer class="wizard-nav">
+        <button id="backButton" class="ghost-action" type="button">Voltar</button>
+        <button id="nextButton" class="primary-action" type="button">Continuar</button>
+      </footer>
     </form>
 
-    <section class="formats" aria-label="Formatos de entrada e saída">
-      <details open>
-        <summary>Formatos aceitos</summary>
+    <section class="formats" aria-label="Formatos aceitos">
+      <details>
+        <summary>Formatos de entrada</summary>
         <div class="format-grid">
           <div>
-            <strong>Malha</strong>
+            <strong>Tecido</strong>
             <span>Colunas: Cor, Quantidade. Se não houver quantidade, toda cor listada conta como disponível.</span>
           </div>
           <div>
@@ -86,11 +182,11 @@
           </div>
           <div>
             <strong>Meta</strong>
-            <span>Colunas: Tamanho, Meta. Também aceita grade aberta: P, M, G, G1.</span>
+            <span>Digitada na tela para P, M, G, GG, G1, G2, G3 e infantil 2 a 16.</span>
           </div>
           <div>
-            <strong>Bloqueadas</strong>
-            <span>Coluna: Cor.</span>
+            <strong>PNG</strong>
+            <span>Usa OCR. Prefira print ou foto nítida de tabela com cabeçalhos visíveis.</span>
           </div>
         </div>
       </details>
@@ -99,6 +195,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

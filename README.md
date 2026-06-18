@@ -2,32 +2,51 @@
 
 Esta é a versão estática do sistema. Ela não usa backend, banco de dados, Python ou FastAPI, porque o GitHub Pages só hospeda arquivos estáticos.
 
-O processamento dos arquivos acontece no navegador do usuário. Os arquivos enviados não são transferidos para servidor.
+O processamento acontece no navegador do usuário. Os arquivos enviados não são transferidos para servidor.
 
-## Como publicar
+## Fluxo da tela
 
-Opção simples:
+O sistema trabalha em 5 passos:
 
-1. Crie um repositório no GitHub.
-2. Envie estes arquivos para a raiz do repositório:
-   - `index.html`
-   - `styles.css`
-   - `app.js`
-   - `.nojekyll`
-3. No GitHub, abra `Settings > Pages`.
-4. Em `Build and deployment`, selecione `Deploy from a branch`.
-5. Escolha a branch `main` e a pasta `/root`.
-6. Salve e aguarde o link do GitHub Pages.
+1. `Tecido`: upload do estoque de tecido ou malha disponível.
+2. `Site`: upload do estoque atual do produto no site.
+3. `Meta`: preenchimento manual da meta por tamanho.
+4. `Bloqueadas`: upload ou digitação das cores que não podem ser cortadas.
+5. `Gerar`: conferência e download da planilha final.
+
+## Meta por tamanho
+
+A meta não é mais enviada por arquivo. Ela é digitada na própria tela, em bolhas circulares por tamanho.
+
+Tamanhos adultos disponíveis:
+
+```text
+P, M, G, GG, G1, G2, G3
+```
+
+Tamanhos infantis disponíveis:
+
+```text
+2, 4, 6, 8, 10, 12, 14, 16 anos
+```
+
+Digite quantidade apenas nos tamanhos que fazem parte do produto. Tamanhos vazios ficam fora do cálculo.
 
 ## Arquivos aceitos
 
-O sistema aceita `PDF`, `XLSX`, `XLSM` e `CSV`.
+Uploads aceitos:
 
-Para PDFs, o arquivo precisa ter texto/tabelas extraíveis. PDF escaneado como imagem deve ser convertido para CSV ou XLSX antes do upload.
+```text
+PDF, XLS, XLSX, XLSM, CSV e PNG
+```
 
-## Entradas
+Para PNG, o sistema usa OCR no navegador para tentar reconhecer o texto da imagem. Funciona melhor com print ou foto nítida de tabela, com cabeçalhos visíveis como `Cor`, `Tamanho`, `Estoque` ou `Quantidade`.
 
-### 1. Estoque de malha
+Foto torta, borrada, com sombra ou sem cabeçalho pode gerar leitura incorreta. Quando possível, prefira `CSV` ou `XLSX`.
+
+## Entrada: estoque de tecido
+
+Formato recomendado:
 
 | Cor | Quantidade |
 | --- | --- |
@@ -36,7 +55,7 @@ Para PDFs, o arquivo precisa ter texto/tabelas extraíveis. PDF escaneado como i
 
 Se a coluna `Quantidade` não existir, toda cor listada será considerada disponível.
 
-### 2. Estoque atual do site
+## Entrada: estoque do site
 
 Formato longo:
 
@@ -53,38 +72,26 @@ Formato em grade:
 
 `XG` é tratado como `G1`.
 
-### 3. Meta por tamanho
+## Entrada: cores bloqueadas
 
-Formato longo:
-
-| Tamanho | Meta |
-| --- | --- |
-| P | 4 |
-| M | 4 |
-| G1 | 3 |
-
-Formato em grade:
-
-| P | M | G | G1 |
-| --- | --- | --- | --- |
-| 4 | 4 | 4 | 3 |
-
-### 4. Cores bloqueadas
+Pode ser arquivo ou texto digitado na tela:
 
 | Cor |
 | --- |
 | Verde Militar |
 | Rosa Seco |
 
+Esse passo é opcional.
+
 ## Regra
 
-Para cada cor que existe no site, possui malha disponível e não está bloqueada:
+Para cada cor que existe no site, possui tecido disponível e não está bloqueada:
 
 ```text
 reposicao = max(meta_por_tamanho - estoque_atual_no_site, 0)
 ```
 
-Cores que não existem no site, cores sem malha disponível e cores bloqueadas ficam fora da reposição.
+Cores que não existem no site, cores sem tecido disponível e cores bloqueadas ficam fora da reposição.
 
 ## Saída
 
@@ -97,3 +104,16 @@ O arquivo baixado é uma planilha `.xlsx` com as abas:
 | `Grade por cor` | Reposição consolidada por cor e tamanho. |
 | `Auditoria` | Todas as combinações calculadas. |
 | `Excluidas` | Cores filtradas e motivo da exclusão. |
+
+## Como publicar
+
+1. Crie um repositório no GitHub.
+2. Envie estes arquivos para a raiz do repositório:
+   - `index.html`
+   - `styles.css`
+   - `app.js`
+   - `.nojekyll`
+3. No GitHub, abra `Settings > Pages`.
+4. Em `Build and deployment`, selecione `Deploy from a branch`.
+5. Escolha a branch `main` e a pasta `/root`.
+6. Salve e aguarde o link do GitHub Pages.

@@ -1,4 +1,7 @@
-const SIZE_ORDER = ["PP", "P", "M", "G", "GG", "G1", "G2", "G3", "G4", "G5"];
+const ADULT_SIZES = ["P", "M", "G", "GG", "G1", "G2", "G3"];
+const KIDS_SIZES = ["2", "4", "6", "8", "10", "12", "14", "16"];
+const SIZE_ORDER = [...ADULT_SIZES, ...KIDS_SIZES];
+
 const COLOR_ALIASES = new Set([
   "cor",
   "cores",
@@ -23,24 +26,107 @@ const QUANTITY_ALIASES = new Set([
   "unidades",
 ]);
 const TARGET_ALIASES = new Set(["meta", "alvo", "objetivo", "quantidade meta", "qtd meta", "qtde meta"]);
-
-const inputs = {
-  malha: document.getElementById("malha"),
-  estoqueSite: document.getElementById("estoqueSite"),
-  meta: document.getElementById("meta"),
-  bloqueadas: document.getElementById("bloqueadas"),
+const TESSERACT_OPTIONS = {
+  workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js",
+  corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js",
+  langPath: "https://tessdata.projectnaptha.com/4.0.0",
 };
-const button = document.getElementById("processButton");
-const statusBox = document.getElementById("status");
+
+const elements = {
+  form: document.getElementById("wizardForm"),
+  fabricFile: document.getElementById("fabricFile"),
+  siteFile: document.getElementById("siteFile"),
+  blockedFile: document.getElementById("blockedFile"),
+  blockedText: document.getElementById("blockedText"),
+  fabricFileName: document.getElementById("fabricFileName"),
+  siteFileName: document.getElementById("siteFileName"),
+  blockedFileName: document.getElementById("blockedFileName"),
+  adultSizes: document.getElementById("adultSizes"),
+  kidsSizes: document.getElementById("kidsSizes"),
+  bulkMetaValue: document.getElementById("bulkMetaValue"),
+  applyAdultMeta: document.getElementById("applyAdultMeta"),
+  applyKidsMeta: document.getElementById("applyKidsMeta"),
+  clearMeta: document.getElementById("clearMeta"),
+  backButton: document.getElementById("backButton"),
+  nextButton: document.getElementById("nextButton"),
+  processButton: document.getElementById("processButton"),
+  statusBox: document.getElementById("status"),
+  summaryFabric: document.getElementById("summaryFabric"),
+  summarySite: document.getElementById("summarySite"),
+  summaryMeta: document.getElementById("summaryMeta"),
+  summaryBlocked: document.getElementById("summaryBlocked"),
+};
+
+let currentStep = 1;
 
 if (window.pdfjsLib) {
   window.pdfjsLib.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 }
 
-Object.entries(inputs).forEach(([id, input]) => {
+renderSizeInputs(elements.adultSizes, ADULT_SIZES);
+renderSizeInputs(elements.kidsSizes, KIDS_SIZES);
+setupFileInput(elements.fabricFile, elements.fabricFileName);
+setupFileInput(elements.siteFile, elements.siteFileName);
+setupFileInput(elements.blockedFile, elements.blockedFileName);
+setupWizard();
+updateWizard();
+
+function setupWizard() {
+  document.querySelectorAll("[data-step-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const target = Number(button.dataset.stepTarget);
+      if (target <= currentStep || canReachStep(target)) {
+        goToStep(target);
+      } else {
+        setStatus("error", "Conclua as etapas anteriores antes de avançar.");
+      }
+    });
+  });
+
+  elements.backButton.addEventListener("click", () => goToStep(currentStep - 1));
+  elements.nextButton.addEventListener("click", () => {
+    if (validateStep(currentStep)) {
+      goToStep(currentStep + 1);
+    }
+  });
+
+  elements.applyAdultMeta.addEventListener("click", () => applyBulkMeta(ADULT_SIZES));
+  elements.applyKidsMeta.addEventListener("click", () => applyBulkMeta(KIDS_SIZES));
+  elements.clearMeta.addEventListener("click", clearMeta);
+  elements.blockedText.addEventListener("input", updateSummary);
+
+  elements.form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await generateWorkbook();
+  });
+}
+
+function renderSizeInputs(container, sizes) {
+  container.innerHTML = "";
+  sizes.forEach((size) => {
+    const label = document.createElement("label");
+    label.className = "size-bubble";
+    label.innerHTML = `
+      <strong>${size}</strong>
+      <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-size="${size}">
+      <small>meta</small>
+    `;
+
+    const input = label.querySelector("input");
+    input.addEventListener("input", () => {
+      label.classList.toggle("is-filled", toNumber(input.value) > 0);
+      updateSummary();
+      setStatus("", "");
+    });
+    input.addEventListener("focus", () => label.classList.add("is-focused"));
+    input.addEventListener("blur", () => label.classList.remove("is-focused"));
+    container.appendChild(label);
+  });
+}
+
+function setupFileInput(input, label) {
   input.addEventListener("change", () => {
-    const label = document.getElementById(`${id}Name`);
     const card = input.closest(".upload-card");
     if (input.files.length) {
       label.textContent = input.files[0].name;
@@ -48,30 +134,142 @@ Object.entries(inputs).forEach(([id, input]) => {
     } else {
       card.classList.remove("is-filled");
     }
+    updateSummary();
+    updateStepper();
     setStatus("", "");
   });
-});
+}
 
-document.getElementById("uploadForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
+function goToStep(step) {
+  currentStep = Math.max(1, Math.min(5, step));
+  updateWizard();
+  setStatus("", "");
+}
+
+function updateWizard() {
+  document.querySelectorAll(".wizard-step").forEach((section) => {
+    section.classList.toggle("is-active", Number(section.dataset.step) === currentStep);
+  });
+  elements.backButton.disabled = currentStep === 1;
+  elements.nextButton.style.display = currentStep === 5 ? "none" : "inline-flex";
+  updateStepper();
+  updateSummary();
+}
+
+function updateStepper() {
+  document.querySelectorAll("[data-step-target]").forEach((button) => {
+    const step = Number(button.dataset.stepTarget);
+    button.classList.toggle("is-active", step === currentStep);
+    button.classList.toggle("is-done", step < currentStep && validateStep(step, false));
+  });
+}
+
+function canReachStep(targetStep) {
+  for (let step = 1; step < targetStep; step += 1) {
+    if (!validateStep(step, false)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function validateStep(step, showMessage = true) {
+  if (step === 1 && !elements.fabricFile.files.length) {
+    if (showMessage) setStatus("error", "Envie o arquivo do estoque de tecido para continuar.");
+    return false;
+  }
+  if (step === 2 && !elements.siteFile.files.length) {
+    if (showMessage) setStatus("error", "Envie o arquivo do estoque do site para continuar.");
+    return false;
+  }
+  if (step === 3 && !readMetaEntries().length) {
+    if (showMessage) setStatus("error", "Digite a meta de pelo menos um tamanho.");
+    return false;
+  }
+  return true;
+}
+
+function applyBulkMeta(sizes) {
+  const value = toNumber(elements.bulkMetaValue.value);
+  if (value <= 0) {
+    elements.bulkMetaValue.focus();
+    setStatus("error", "Digite um valor maior que zero para aplicar.");
+    return;
+  }
+
+  sizes.forEach((size) => {
+    const input = document.querySelector(`[data-size="${size}"]`);
+    if (input) {
+      input.value = value;
+      input.closest(".size-bubble").classList.add("is-filled");
+    }
+  });
+  updateSummary();
+  setStatus("", "");
+}
+
+function clearMeta() {
+  document.querySelectorAll("[data-size]").forEach((input) => {
+    input.value = "";
+    input.closest(".size-bubble").classList.remove("is-filled");
+  });
+  updateSummary();
+  setStatus("", "");
+}
+
+function readMetaEntries() {
+  return Array.from(document.querySelectorAll("[data-size]"))
+    .map((input) => ({
+      Tamanho: input.dataset.size,
+      Meta: niceNumber(input.value),
+    }))
+    .filter((row) => row.Meta > 0);
+}
+
+function updateSummary() {
+  elements.summaryFabric.textContent = elements.fabricFile.files[0]?.name || "Aguardando arquivo";
+  elements.summarySite.textContent = elements.siteFile.files[0]?.name || "Aguardando arquivo";
+
+  const meta = readMetaEntries();
+  const totalMeta = meta.reduce((total, row) => total + row.Meta, 0);
+  elements.summaryMeta.textContent = meta.length
+    ? `${meta.length} tamanhos preenchidos, total ${niceNumber(totalMeta)}`
+    : "Nenhum tamanho preenchido";
+
+  const blockedCount = readManualBlockedRows().length;
+  const blockedFile = elements.blockedFile.files[0]?.name;
+  if (blockedFile && blockedCount) {
+    elements.summaryBlocked.textContent = `${blockedFile} + ${blockedCount} digitadas`;
+  } else if (blockedFile) {
+    elements.summaryBlocked.textContent = blockedFile;
+  } else if (blockedCount) {
+    elements.summaryBlocked.textContent = `${blockedCount} cores digitadas`;
+  } else {
+    elements.summaryBlocked.textContent = "Sem bloqueadas";
+  }
+}
+
+async function generateWorkbook() {
+  if (!canReachStep(5)) {
+    setStatus("error", "Complete tecido, site e meta antes de gerar.");
+    return;
+  }
 
   try {
     ensureLibraries();
-    button.disabled = true;
+    elements.processButton.disabled = true;
     setStatus("loading", "Lendo arquivos e calculando reposição...");
 
-    const tables = {
-      malha: await readUploadedTable(inputs.malha.files[0]),
-      estoqueSite: await readUploadedTable(inputs.estoqueSite.files[0]),
-      meta: await readUploadedTable(inputs.meta.files[0]),
-      bloqueadas: await readUploadedTable(inputs.bloqueadas.files[0]),
-    };
+    const fabricRows = await readUploadedTable(elements.fabricFile.files[0], "malha");
+    const siteRows = await readUploadedTable(elements.siteFile.files[0], "estoqueSite");
+    const blockedRows = await readBlockedRows();
+    const metaRows = readMetaEntries();
 
     const sheets = calculateReplacement(
-      normalizeFabricStock(tables.malha),
-      normalizeSiteStock(tables.estoqueSite),
-      normalizeTargetBySize(tables.meta),
-      normalizeBlockedColors(tables.bloqueadas),
+      normalizeFabricStock(fabricRows),
+      normalizeSiteStock(siteRows),
+      normalizeTargetBySize(metaRows),
+      normalizeBlockedColors(blockedRows),
     );
 
     exportWorkbook(sheets);
@@ -79,35 +277,52 @@ document.getElementById("uploadForm").addEventListener("submit", async (event) =
   } catch (error) {
     setStatus("error", error.message || "Não foi possível gerar a planilha.");
   } finally {
-    button.disabled = false;
+    elements.processButton.disabled = false;
   }
-});
+}
+
+async function readBlockedRows() {
+  const rows = [];
+  if (elements.blockedFile.files.length) {
+    rows.push(...(await readUploadedTable(elements.blockedFile.files[0], "bloqueadas")));
+  }
+  rows.push(...readManualBlockedRows());
+  return rows;
+}
+
+function readManualBlockedRows() {
+  return elements.blockedText.value
+    .split(/\r?\n/)
+    .map((line) => cleanText(line))
+    .filter(Boolean)
+    .map((color) => ({ Cor: color }));
+}
 
 function ensureLibraries() {
   if (!window.XLSX) {
     throw new Error("Biblioteca de planilhas não carregou. Verifique sua conexão e recarregue a página.");
   }
-  if (!window.pdfjsLib) {
-    throw new Error("Biblioteca de PDF não carregou. Verifique sua conexão e recarregue a página.");
-  }
 }
 
-async function readUploadedTable(file) {
+async function readUploadedTable(file, kind) {
   if (!file) {
-    throw new Error("Envie todos os quatro arquivos antes de gerar a planilha.");
+    throw new Error("Arquivo não enviado.");
   }
 
   const extension = file.name.split(".").pop().toLowerCase();
   if (extension === "csv") {
     return tableFromRows(parseDelimitedRows(await file.text()));
   }
-  if (extension === "xlsx" || extension === "xlsm") {
+  if (["xls", "xlsx", "xlsm"].includes(extension)) {
     return readWorkbook(await file.arrayBuffer());
   }
   if (extension === "pdf") {
     return readPdf(await file.arrayBuffer(), file.name);
   }
-  throw new Error(`Arquivo não suportado: ${file.name}. Envie PDF, XLSX ou CSV.`);
+  if (extension === "png") {
+    return readImage(file, kind);
+  }
+  throw new Error(`Arquivo não suportado: ${file.name}. Envie PDF, XLS, XLSX, CSV ou PNG.`);
 }
 
 function readWorkbook(buffer) {
@@ -127,6 +342,10 @@ function readWorkbook(buffer) {
 }
 
 async function readPdf(buffer, filename) {
+  if (!window.pdfjsLib) {
+    throw new Error("Biblioteca de PDF não carregou. Verifique sua conexão e recarregue a página.");
+  }
+
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
   const rows = [];
 
@@ -137,10 +356,28 @@ async function readPdf(buffer, filename) {
   }
 
   if (rows.length < 2) {
-    throw new Error(`O PDF ${filename} não possui tabela extraível. Exporte esse relatório como CSV ou XLSX.`);
+    throw new Error(`O PDF ${filename} não possui tabela extraível. Envie CSV/XLSX ou um PNG nítido.`);
   }
 
   return tableFromRows(rows);
+}
+
+async function readImage(file, kind) {
+  if (!window.Tesseract) {
+    throw new Error("Biblioteca de OCR não carregou. Verifique sua conexão e recarregue a página.");
+  }
+
+  setStatus("loading", `Lendo PNG por OCR: ${file.name}`);
+  const result = await Tesseract.recognize(file, "por+eng", {
+    ...TESSERACT_OPTIONS,
+    logger(message) {
+      if (message.status === "recognizing text" && typeof message.progress === "number") {
+        setStatus("loading", `Lendo PNG por OCR... ${Math.round(message.progress * 100)}%`);
+      }
+    },
+  });
+
+  return tableFromRows(rowsFromOcrText(result.data.text, file.name, kind));
 }
 
 function rowsFromPdfItems(items) {
@@ -187,6 +424,160 @@ function rowsFromPdfItems(items) {
       return cells;
     })
     .filter((row) => row.some((cell) => cleanText(cell)));
+}
+
+function rowsFromOcrText(text, filename, kind) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => normalizeOcrLine(line))
+    .filter(Boolean);
+
+  if (!lines.length) {
+    throw new Error(`O PNG ${filename} não possui texto legível para OCR.`);
+  }
+
+  const structuredRows = rowsFromStructuredOcrLines(lines);
+  if (tableLooksUseful(structuredRows, kind)) {
+    return structuredRows;
+  }
+
+  const looseRows = rowsFromLooseOcrLines(lines, kind);
+  if (kind === "bloqueadas" && looseRows.length === 1) {
+    return looseRows;
+  }
+  if (looseRows.length < 2) {
+    throw new Error(
+      `Não consegui identificar uma tabela no PNG ${filename}. Use uma imagem nítida com cabeçalhos visíveis ou envie CSV/XLSX.`,
+    );
+  }
+  return looseRows;
+}
+
+function rowsFromStructuredOcrLines(lines) {
+  return lines
+    .map((line) => splitOcrLine(line))
+    .filter((row) => row.length > 1 && row.some((cell) => cleanText(cell)));
+}
+
+function splitOcrLine(line) {
+  if (/[;\t|]/.test(line)) {
+    return line.split(/[;\t|]+/).map((cell) => cleanText(cell)).filter(Boolean);
+  }
+  if (/\s{2,}/.test(line)) {
+    return line.split(/\s{2,}/).map((cell) => cleanText(cell)).filter(Boolean);
+  }
+  return [line];
+}
+
+function tableLooksUseful(rows, kind) {
+  if (rows.length < 2) {
+    return false;
+  }
+
+  const header = rows[0].join(" ");
+  const normalizedHeader = normalizeLabel(header);
+  const sizes = extractSizes(header);
+
+  if (kind === "estoqueSite" && sizes.length > 1) {
+    return true;
+  }
+  if (kind === "bloqueadas" && normalizedHeader.includes("cor")) {
+    return true;
+  }
+  return (
+    normalizedHeader.includes("cor") ||
+    normalizedHeader.includes("tamanho") ||
+    normalizedHeader.includes("estoque") ||
+    normalizedHeader.includes("quantidade")
+  );
+}
+
+function rowsFromLooseOcrLines(lines, kind) {
+  const headerIndex = findOcrHeaderIndex(lines, kind);
+  const headerLine = headerIndex >= 0 ? lines[headerIndex] : "";
+  const dataLines = (headerIndex >= 0 ? lines.slice(headerIndex + 1) : lines).filter((line) => !isProbablyHeader(line));
+
+  if (kind === "bloqueadas") {
+    return [["Cor"], ...dataLines.map((line) => [line])];
+  }
+
+  if (kind === "estoqueSite") {
+    const sizes = extractSizes(headerLine);
+    if (sizes.length > 1) {
+      return [["Cor", ...sizes], ...dataLines.map((line) => parseColorWideLine(line, sizes.length)).filter(Boolean)];
+    }
+    return [["Cor", "Tamanho", "Estoque"], ...dataLines.map(parseColorSizeNumberLine).filter(Boolean)];
+  }
+
+  const fabricRows = dataLines.map(parseColorNumberLine).filter(Boolean);
+  if (fabricRows.length) {
+    return [["Cor", "Quantidade"], ...fabricRows];
+  }
+  return [["Cor"], ...dataLines.map((line) => [line])];
+}
+
+function findOcrHeaderIndex(lines, kind) {
+  return lines.slice(0, 10).findIndex((line) => {
+    const label = normalizeLabel(line);
+    const sizes = extractSizes(line);
+    if (kind === "estoqueSite") {
+      return label.includes("cor") || label.includes("estoque") || label.includes("tamanho") || sizes.length > 1;
+    }
+    if (kind === "bloqueadas") {
+      return label.includes("cor") || label.includes("bloque");
+    }
+    return label.includes("cor") || label.includes("quantidade") || label.includes("dispon");
+  });
+}
+
+function parseColorNumberLine(line) {
+  const tokens = line.split(/\s+/).filter(Boolean);
+  const numberIndex = findLastIndex(tokens, (token) => hasNumber(token));
+  if (numberIndex <= 0) {
+    return null;
+  }
+  return [tokens.slice(0, numberIndex).join(" "), tokens[numberIndex]];
+}
+
+function parseColorSizeNumberLine(line) {
+  const tokens = line.split(/\s+/).filter(Boolean);
+  const numberIndex = findLastIndex(tokens, (token) => hasNumber(token));
+  if (numberIndex <= 1) {
+    return null;
+  }
+
+  let sizeIndex = -1;
+  for (let index = numberIndex - 1; index >= 0; index -= 1) {
+    if (isSizeHeader(tokens[index])) {
+      sizeIndex = index;
+      break;
+    }
+  }
+
+  if (sizeIndex <= 0) {
+    return null;
+  }
+
+  return [tokens.slice(0, sizeIndex).join(" "), normalizeSize(tokens[sizeIndex]), tokens[numberIndex]];
+}
+
+function parseColorWideLine(line, sizeCount) {
+  const tokens = line.split(/\s+/).filter(Boolean);
+  const valueIndexes = [];
+
+  for (let index = tokens.length - 1; index >= 0 && valueIndexes.length < sizeCount; index -= 1) {
+    if (hasNumber(tokens[index])) {
+      valueIndexes.unshift(index);
+    }
+  }
+
+  if (valueIndexes.length < sizeCount || valueIndexes[0] <= 0) {
+    return null;
+  }
+
+  const color = tokens.slice(0, valueIndexes[0]).join(" ");
+  const values = valueIndexes.map((index) => tokens[index]);
+  return [color, ...values];
 }
 
 function parseDelimitedRows(text) {
@@ -240,8 +631,8 @@ function tableFromRows(rows) {
     .map((row) => row.map((cell) => cleanText(cell)))
     .filter((row) => row.some((cell) => cell));
 
-  if (cleanRows.length < 1) {
-    throw new Error("Arquivo sem dados válidos.");
+  if (!cleanRows.length) {
+    return [];
   }
 
   const headerIndex = cleanRows.findIndex((row) => row.filter(Boolean).length >= 1);
@@ -257,7 +648,7 @@ function tableFromRows(rows) {
 
 function calculateReplacement(fabric, siteStock, target, blocked) {
   if (!target.length) {
-    throw new Error("O arquivo de meta não possui tamanhos e metas válidas.");
+    throw new Error("A meta não possui tamanhos preenchidos.");
   }
   if (!siteStock.length) {
     throw new Error("O arquivo de estoque do site não possui estoque válido.");
@@ -281,7 +672,7 @@ function calculateReplacement(fabric, siteStock, target, blocked) {
     }
 
     if (!fabricRow || !fabricRow.available) {
-      excluded.push({ Cor: siteColor.color, Motivo: "Sem malha disponível", Origem: "Estoque do site" });
+      excluded.push({ Cor: siteColor.color, Motivo: "Sem tecido disponivel", Origem: "Estoque do site" });
       return;
     }
 
@@ -293,10 +684,10 @@ function calculateReplacement(fabric, siteStock, target, blocked) {
         Tamanho: targetRow.size,
         "Estoque atual": niceNumber(currentStock),
         Meta: niceNumber(targetRow.target),
-        Reposição: niceNumber(quantity),
-        "Malha disponível": fabricRow.quantity === null ? "Sim" : niceNumber(fabricRow.quantity),
+        Reposicao: niceNumber(quantity),
+        "Tecido disponivel": fabricRow.quantity === null ? "Sim" : niceNumber(fabricRow.quantity),
       };
-      audit.push({ ...row, Status: "Reposição calculada" });
+      audit.push({ ...row, Status: "Reposicao calculada" });
       if (quantity > 0) {
         replacement.push(row);
       }
@@ -306,7 +697,7 @@ function calculateReplacement(fabric, siteStock, target, blocked) {
   const siteColorKeys = new Set(siteColors.map((row) => row.colorKey));
   fabric.forEach((fabricRow) => {
     if (!siteColorKeys.has(fabricRow.colorKey) && !blockedKeys.has(fabricRow.colorKey)) {
-      excluded.push({ Cor: fabricRow.color, Motivo: "Cor não existe no site", Origem: "Estoque de malha" });
+      excluded.push({ Cor: fabricRow.color, Motivo: "Cor nao existe no site", Origem: "Estoque de tecido" });
     }
   });
 
@@ -327,21 +718,21 @@ function calculateReplacement(fabric, siteStock, target, blocked) {
 }
 
 function normalizeFabricStock(rows) {
-  const colorColumn = findColumn(rows, COLOR_ALIASES, "estoque de malha", true);
-  const quantityColumn = findColumn(rows, QUANTITY_ALIASES, "estoque de malha", false);
+  const colorColumn = findColumn(rows, COLOR_ALIASES, "estoque de tecido", true);
+  const quantityColumn = findColumn(rows, QUANTITY_ALIASES, "estoque de tecido", false);
   const grouped = new Map();
 
   rows.forEach((row) => {
     const color = cleanText(row[colorColumn]);
-    const colorKeyValue = colorKey(color);
-    if (!colorKeyValue) return;
+    const key = colorKey(color);
+    if (!key) return;
 
     const quantityValue = quantityColumn ? row[quantityColumn] : null;
     const numericQuantity = quantityColumn && hasNumber(quantityValue) ? toNumber(quantityValue) : null;
     const available = quantityColumn ? isAvailable(quantityValue) : true;
-    const current = grouped.get(colorKeyValue) || {
+    const current = grouped.get(key) || {
       color,
-      colorKey: colorKeyValue,
+      colorKey: key,
       quantity: null,
       available: false,
     };
@@ -350,12 +741,12 @@ function normalizeFabricStock(rows) {
     if (numericQuantity !== null) {
       current.quantity = (current.quantity || 0) + numericQuantity;
     }
-    grouped.set(colorKeyValue, current);
+    grouped.set(key, current);
   });
 
   const result = Array.from(grouped.values()).sort((a, b) => a.color.localeCompare(b.color));
   if (!result.length) {
-    throw new Error("O arquivo de estoque de malha não possui cores válidas.");
+    throw new Error("O arquivo de estoque de tecido não possui cores válidas.");
   }
   return result;
 }
@@ -422,7 +813,7 @@ function normalizeTargetBySize(rows) {
   } else {
     const sizeColumns = columnsOf(rows).filter((column) => isSizeHeader(column));
     if (!sizeColumns.length) {
-      throw new Error("A meta precisa ter Tamanho/Meta ou uma grade com uma coluna por tamanho.");
+      throw new Error("A meta precisa ter pelo menos um tamanho preenchido.");
     }
     sizeColumns.forEach((column) => {
       const size = normalizeSize(column);
@@ -463,7 +854,7 @@ function buildPivot(replacement) {
   const byColor = new Map();
   replacement.forEach((row) => {
     const current = byColor.get(row.Cor) || { Cor: row.Cor };
-    current[row.Tamanho] = (current[row.Tamanho] || 0) + toNumber(row.Reposição);
+    current[row.Tamanho] = (current[row.Tamanho] || 0) + toNumber(row.Reposicao);
     byColor.set(row.Cor, current);
   });
 
@@ -480,13 +871,13 @@ function buildPivot(replacement) {
 }
 
 function buildSummary(replacement, excluded) {
-  const totalPieces = replacement.reduce((total, row) => total + toNumber(row.Reposição), 0);
+  const totalPieces = replacement.reduce((total, row) => total + toNumber(row.Reposicao), 0);
   const colors = new Set(replacement.map((row) => row.Cor)).size;
   return [
-    { Indicador: "Peças para repor", Valor: niceNumber(totalPieces) },
-    { Indicador: "Cores com reposição", Valor: colors },
-    { Indicador: "Linhas de reposição", Valor: replacement.length },
-    { Indicador: "Cores/linhas excluídas", Valor: excluded.length },
+    { Indicador: "Pecas para repor", Valor: niceNumber(totalPieces) },
+    { Indicador: "Cores com reposicao", Valor: colors },
+    { Indicador: "Linhas de reposicao", Valor: replacement.length },
+    { Indicador: "Cores/linhas excluidas", Valor: excluded.length },
   ];
 }
 
@@ -498,8 +889,8 @@ function exportWorkbook(sheets) {
     "Tamanho",
     "Estoque atual",
     "Meta",
-    "Reposição",
-    "Malha disponível",
+    "Reposicao",
+    "Tecido disponivel",
   ]);
 
   const pivotHeaders = columnsOf(sheets["Grade por cor"]);
@@ -509,8 +900,8 @@ function exportWorkbook(sheets) {
     "Tamanho",
     "Estoque atual",
     "Meta",
-    "Reposição",
-    "Malha disponível",
+    "Reposicao",
+    "Tecido disponivel",
     "Status",
   ]);
   appendSheet(workbook, "Excluidas", sheets.Excluidas, ["Cor", "Motivo", "Origem"]);
@@ -559,22 +950,39 @@ function columnsOf(rows) {
 }
 
 function normalizeSize(value) {
-  const token = stripAccents(cleanText(value)).toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (["XG", "EXG", "EG", "G01"].includes(token)) {
+  const raw = stripAccents(cleanText(value)).toUpperCase();
+  const compact = raw.replace(/[^A-Z0-9]/g, "");
+  if (["XG", "EXG", "EG", "G01"].includes(compact)) {
     return "G1";
   }
-  return token;
+  if (ADULT_SIZES.includes(compact)) {
+    return compact;
+  }
+
+  const kidsMatch = raw.match(/^(\d{1,2})(?:\s*ANOS?)?$/);
+  if (kidsMatch && KIDS_SIZES.includes(kidsMatch[1])) {
+    return kidsMatch[1];
+  }
+
+  return compact;
 }
 
 function isSizeHeader(value) {
   const size = normalizeSize(value);
-  return Boolean(size) && (SIZE_ORDER.includes(size) || /^G[1-9]$/.test(size) || /^[0-9]{1,2}$/.test(size));
+  return Boolean(size) && SIZE_ORDER.includes(size);
 }
 
 function sizeRank(size) {
   const normalized = normalizeSize(size);
   const index = SIZE_ORDER.indexOf(normalized);
   return index >= 0 ? index : SIZE_ORDER.length + normalized.charCodeAt(0);
+}
+
+function extractSizes(line) {
+  return line
+    .split(/\s+/)
+    .map((token) => normalizeSize(token))
+    .filter((token) => isSizeHeader(token));
 }
 
 function isAvailable(value) {
@@ -633,6 +1041,21 @@ function colorKey(value) {
   return stripAccents(value).toUpperCase().replace(/[^A-Z0-9]+/g, "");
 }
 
+function normalizeOcrLine(line) {
+  return cleanText(line.replace(/[¦|]/g, " | ").replace(/[“”]/g, '"'));
+}
+
+function isProbablyHeader(line) {
+  const label = normalizeLabel(line);
+  return (
+    label.includes("cor") ||
+    label.includes("tamanho") ||
+    label.includes("estoque") ||
+    label.includes("quantidade") ||
+    label.includes("bloque")
+  );
+}
+
 function dedupeHeaders(headers) {
   const seen = new Map();
   return headers.map((header, index) => {
@@ -670,14 +1093,23 @@ function unionSets(...sets) {
   return new Set(sets.flatMap((set) => Array.from(set)));
 }
 
+function findLastIndex(items, predicate) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    if (predicate(items[index], index)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function setStatus(type, message) {
-  statusBox.className = "status";
-  statusBox.textContent = message;
+  elements.statusBox.className = "status";
+  elements.statusBox.textContent = message;
   if (type && message) {
-    statusBox.classList.add("is-visible", `is-${type}`);
+    elements.statusBox.classList.add("is-visible", `is-${type}`);
   }
 }
